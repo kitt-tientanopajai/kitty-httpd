@@ -1,0 +1,33 @@
+ChangeLogs
+
+0.0.4a Wed, 03 Dec 2008 04:25:38 +0700 
+	- Capable to transfer file size >= 2 GB
+	- GNU Coding Style
+	- Honour index.html if exists
+	- Capable to handle escaped URLs
+	- Add HTML code for errors.
+	- Bug fixed
+		- File size should be long long unsigned.
+		- Content length should be long long unsigned.
+
+0.0.3 Mon, 06 Oct 2008 01:00:46 +0700
+	- Use current directory as default base directory.
+	- Add option -p port.
+	- Add option -d base directory.
+	- Implement directory index.
+	- Add more MIME type (i.e., OpenOffice).
+	- Bugs fixed 
+		- Send HTTP version according to the request.
+		- Correct some MIME Types.
+
+0.0.2 Tue, 30 Sep 2008 20:04:02 +0700
+	- Implement all HTTP/1.1 requirement (GET, HEAD).
+	- Response based on version requested.
+	- NPTL-based Multithreading.
+	- MIME supported based on file extension.
+	- Bugs fixed.
+
+0.0.1 Sat, 27 Sep 2008 23:06:18 +0700
+	- Initial version.
+	- Implement GET method only.
+	- HTTP/0.9.
