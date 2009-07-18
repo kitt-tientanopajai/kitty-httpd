@@ -2,7 +2,7 @@
 kitty-httpd.c 
 A small-footprint, low-feature web server.
 
-v. 0.0.4
+v. 0.0.4b
 Copyright (C) 2008 Kitt Tientanopajai
 
 This program is free software: you can redistribute it and/or modify
@@ -20,41 +20,46 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+0.0.4b Sat, 18 Jul 2009 15:48:42 +0700
+	- Properly stop the server when receiving SIGINT (Ctrl+C)
+	- Rewrite sendfile loop
 	- Capable to transfer file size >= 2 GB
 	- GNU Coding Style
 	- Honour index.html if exists
 	- Capable to handle escaped URLs
-	- Add HTML code for errors.
-	- Bug fixed
-		- File size should be long long unsigned.
-		- Content length should be long long unsigned.
+	- Add HTML code for errors
+	- Bugs fixed
+		- File size should be long long unsigned
+		- Content length should be long long unsigned
+		- Long-waiting 'cancel download' handle
+		- Threads do not exit properly causing high memory consumption
+		- Memory leaks in threads
 
 Mon, 06 Oct 2008 01:00:46 +0700 - v0.0.3
-	- Use current directory as default base directory.
-	- Add option -p port.
-	- Add option -d base directory.
-	- Implement directory index.
-	- Add more MIME type (i.e., OpenOffice).
+	- Use current directory as default base directory
+	- Add option -p port
+	- Add option -d base directory
+	- Implement directory index
+	- Add more MIME type (i.e., OpenOffice)
 	- Bugs fixed 
-		- Send HTTP version according to the request.
-		- Correct some MIME Types.
+		- Send HTTP version according to the request
+		- Correct some MIME Types
 
 * Tue, 30 Sep 2008 20:04:02 +0700 - v0.0.2
-	- Implement all HTTP/1.1 requirement (GET, HEAD).
-	- Response based on version requested.
-	- NPTL-based Multithreading.
-	- MIME supported based on file extension.
-	- Bugs fixed.
+	- Implement all HTTP/1.1 requirement (GET, HEAD)
+	- Response based on version requested
+	- NPTL-based Multithreading
+	- MIME supported based on file extension
+	- Bugs fixed
 
 * Sat, 27 Sep 2008 23:06:18 +0700 - v0.0.1
-	- Initial version.
-	- Implement GET method only.
-	- HTTP/0.9.
+	- Initial version
+	- Implement GET method only
+	- HTTP/0.9
 
 Known Issues
 ------------
-	- Stability - Unknown crash
-		- Tested with AB, works at least -n100 -c20
+	As of 0.0.4b, none.
 
 To Do
 -----
@@ -63,7 +68,6 @@ To Do
 	- Default favicon.ico
 	- Log to file option
 	- Foreground & background mode
-	- Ctrl-C signal handle in foreground mode
 	- IPv6 supported
 	- Secure programming.
 	- Code optimization.
@@ -79,6 +83,7 @@ Not-so-near-future To Do
 #define _FILE_OFFSET_BITS 64
 #define __USE_LARGEFILE64 1
 #define __USE_FILE_OFFSET64 1
+#define CHUNKSIZE 1073741824
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -89,6 +94,7 @@ Not-so-near-future To Do
 #include <pthread.h>
 #include <dirent.h>
 #include <errno.h>
+#include <signal.h>
 #include <limits.h>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -104,6 +110,7 @@ Not-so-near-future To Do
 #define BUFFER_LEN 1024
 #define SERVER_VERSION "Kitty-HTTPD/0.0.4"
 
+static void *sig_int (int);
 static void *service_client (void *);
 static char *get_index_page (char *);
 static char *get_mime_type (char *);
@@ -111,6 +118,9 @@ void unescape (char *);
 static int hex (char);
 
 char basedir[256];
+int stop = 0;
+
+int nth = 0;
 
 int
 main (int argc, char *argv[])
@@ -152,7 +162,12 @@ main (int argc, char *argv[])
 			exit (EXIT_FAILURE);
 		}
 	else
-		close (bd);
+		{
+			close (bd);
+		}
+	/* signal handler */
+	signal (SIGINT, (void *) sig_int);
+	siginterrupt (SIGINT, 1);
 
 	/* create socket */
 	if ((server_sockfd = socket (PF_INET, SOCK_STREAM, 0)) == -1)
@@ -185,32 +200,37 @@ main (int argc, char *argv[])
 					server_port, basedir);
 
 	/* main loop - accept a connection, thread out service function */
-	while (1)
+	while (!stop)
 		{
 			int client_sockfd;
 			struct sockaddr_in client_addr;
 			socklen_t client_addr_len = sizeof client_addr;
 
-			if ((client_sockfd =
-					 accept (server_sockfd, (struct sockaddr *) &client_addr,
-									 &client_addr_len)) == -1)
-				{
-					perror ("Error accepting connection");
-					shutdown ((int) client_sockfd, SHUT_RDWR);
-					shutdown ((int) server_sockfd, SHUT_RDWR);
-					exit (EXIT_FAILURE);
-				}
+			if ((client_sockfd = accept (server_sockfd, (struct sockaddr *) &client_addr, &client_addr_len)) != -1)
+				{	
+					pthread_t tid;
 
-			pthread_t tid;
-
-			if (pthread_create (&tid, NULL, service_client, (void *) client_sockfd))
-				{
-					perror ("Error creating service thread");
-					exit (EXIT_FAILURE);
+					if (pthread_create (&tid, NULL, service_client, (void *) client_sockfd))
+						{
+							perror ("Error creating service thread");
+						}
+					else
+						{
+							pthread_detach (tid);
+						}
 				}
 		}
 
+	shutdown ((int) server_sockfd, SHUT_RDWR);
+	printf ("\nSIGINT received. Server shutdown.\n");
+
 	return 0;
+}
+
+static void *
+sig_int (int sig)
+{
+	stop = 1;
 }
 
 /* service thread per client
@@ -230,7 +250,9 @@ service_client (void *client_sockfd_ptr)
 				 && i < BUFFER_LEN)
 		{
 			if (ch == '\r')
-				continue;
+				{
+					continue;
+				}
 			else
 				{
 					buffer[i] = ch;
@@ -245,15 +267,14 @@ service_client (void *client_sockfd_ptr)
 	if (recv_len == 0)
 		{
 			printf ("Client closed connection\n");
-			shutdown ((int) client_sockfd, SHUT_RDWR);
+			close ((int) client_sockfd);
+			pthread_exit (NULL);
 		}
-	else
+	else if (recv_len == -1)
 		{
-			if (recv_len == -1)
-				{
-					perror ("Error receiving data");
-					exit (EXIT_FAILURE);
-				}
+			perror ("Error receiving data");
+			close ((int) client_sockfd);
+			pthread_exit (NULL);
 		}
 
 	/* get current time */
@@ -285,11 +306,15 @@ service_client (void *client_sockfd_ptr)
 			if (setsockopt
 					((int) client_sockfd, IPPROTO_TCP, TCP_NODELAY, &optval,
 					 sizeof optval) == -1)
-				perror ("Error seting TCP_NODELAY");
+				{
+					perror ("Error seting TCP_NODELAY");
+				}
 			if (setsockopt
 					((int) client_sockfd, IPPROTO_TCP, TCP_CORK, &optval,
 					 sizeof optval) == -1)
-				perror ("Error seting TCP_CORK");
+				{
+					perror ("Error seting TCP_CORK");
+				}
 
 			unescape (URL);
 			sprintf (file, "%s/%s", basedir, URL);
@@ -342,16 +367,19 @@ service_client (void *client_sockfd_ptr)
 							send ((int) client_sockfd, header, strlen (header), 0);
 							off_t offset = 0;
 							uint64_t total_xfer = 0;
-							size_t n = file_stat.st_size / 1073741824, i;
-							size_t r = file_stat.st_size % 1073741824;
 
-							/* for Ext3 FS, n should be <= 2048 if count is 1 GB */
-							for (i = 0; i < n; i++)
+							do 
 								{
-									xfer_size = sendfile ((int) client_sockfd, fd, &offset, 1073741824);
+									xfer_size = sendfile ((int) client_sockfd, fd, &offset, CHUNKSIZE);
 									if (xfer_size == -1)
 										{
-											perror ("Error transfer file");
+											perror ("Error transfer data");
+											break;
+										}
+									else if ((xfer_size != CHUNKSIZE) && (xfer_size < (file_stat.st_size - total_xfer)))
+										{
+											// client termination 
+											total_xfer += xfer_size;
 											break;
 										}
 									else
@@ -359,20 +387,8 @@ service_client (void *client_sockfd_ptr)
 											total_xfer += xfer_size;
 										}
 								}
+							while (total_xfer < file_stat.st_size);
 
-							if (xfer_size != -1) 
-								{
-									xfer_size = sendfile ((int) client_sockfd, fd, &offset, r);
-									if (xfer_size == -1)
-										{
-											perror ("Error transfer file");
-										}
-									else
-										{
-											total_xfer += xfer_size;
-										}
-								}
-									
 							printf ("%s: %s %s %s %s 200 OK %llu\n", timestamp,
 											inet_ntoa (client.sin_addr), method, URL, version,
 											total_xfer);
@@ -413,6 +429,8 @@ service_client (void *client_sockfd_ptr)
 											printf ("%s: %s %s %s %s 200 OK %d\n", timestamp,
 															inet_ntoa (client.sin_addr), method, URL,
 															version, xfer_size);
+
+											free (index_page);
 										}
 								}
 							else

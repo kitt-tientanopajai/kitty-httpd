@@ -1,12 +1,20 @@
 ChangeLogs
 
+0.0.4b Sat, 18 Jul 2009 15:48:42 +0700
+	- Rewrite sendfile loop
+	- Bugs fixed
+		- Properly stop the server when receiving SIGINT (Ctrl+C)
+		- Long-waiting 'cancel download' handle
+		- Threads do not exit properly causing high memory consumption
+		- Memory leaks in threads
+
 0.0.4a Wed, 03 Dec 2008 04:25:38 +0700 
 	- Capable to transfer file size >= 2 GB
 	- GNU Coding Style
 	- Honour index.html if exists
 	- Capable to handle escaped URLs
 	- Add HTML code for errors.
-	- Bug fixed
+	- Bugs fixed
 		- File size should be long long unsigned.
 		- Content length should be long long unsigned.
 
