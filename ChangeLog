@@ -1,20 +1,19 @@
 ChangeLogs
 
-0.0.4b Sat, 18 Jul 2009 15:48:42 +0700
-	- Rewrite sendfile loop
-	- Bugs fixed
-		- Properly stop the server when receiving SIGINT (Ctrl+C)
-		- Long-waiting 'cancel download' handle
-		- Threads do not exit properly causing high memory consumption
-		- Memory leaks in threads
 
-0.0.4a Wed, 03 Dec 2008 04:25:38 +0700 
+* Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
+	- Add SO_REUSEADDR
+	- Rewrite sendfile loop
 	- Capable to transfer file size >= 2 GB
 	- GNU Coding Style
 	- Honour index.html if exists
 	- Capable to handle escaped URLs
 	- Add HTML code for errors.
 	- Bugs fixed
+		- Properly stop the server when receiving SIGINT (Ctrl+C)
+		- Long-waiting 'cancel download' handle
+		- Threads do not exit properly causing high memory consumption
+		- Memory leaks in threads
 		- File size should be long long unsigned.
 		- Content length should be long long unsigned.
 

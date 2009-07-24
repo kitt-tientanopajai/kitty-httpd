@@ -2,8 +2,8 @@
 kitty-httpd.c 
 A small-footprint, low-feature web server.
 
-v. 0.0.4b
-Copyright (C) 2008 Kitt Tientanopajai
+v. 0.0.4
+Copyright (C) 2008-2009 Kitt Tientanopajai
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as 
@@ -20,8 +20,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
-0.0.4b Sat, 18 Jul 2009 15:48:42 +0700
-	- Properly stop the server when receiving SIGINT (Ctrl+C)
+* Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
+	- Add SO_REUSEADDR 
 	- Rewrite sendfile loop
 	- Capable to transfer file size >= 2 GB
 	- GNU Coding Style
@@ -29,13 +29,14 @@ ChangeLogs
 	- Capable to handle escaped URLs
 	- Add HTML code for errors
 	- Bugs fixed
-		- File size should be long long unsigned
-		- Content length should be long long unsigned
+		- Properly stop the server when receiving SIGINT (Ctrl+C)
 		- Long-waiting 'cancel download' handle
 		- Threads do not exit properly causing high memory consumption
 		- Memory leaks in threads
+		- File size should be long long unsigned
+		- Content length should be long long unsigned
 
-Mon, 06 Oct 2008 01:00:46 +0700 - v0.0.3
+* Mon, 06 Oct 2008 01:00:46 +0700 - v0.0.3
 	- Use current directory as default base directory
 	- Add option -p port
 	- Add option -d base directory
@@ -59,19 +60,19 @@ Mon, 06 Oct 2008 01:00:46 +0700 - v0.0.3
 
 Known Issues
 ------------
-	As of 0.0.4b, none.
+	As of Fri, 24 Jul 2009 20:22:05 +0700, none.
 
 To Do
 -----
-	- Option for chroot
-	- Options to set uid/gid
+	- Use chroot option
+	- Set uid/gid option
 	- Default favicon.ico
 	- Log to file option
 	- Foreground & background mode
 	- IPv6 supported
-	- Secure programming.
-	- Code optimization.
-	- Network optimization.
+	- Secure programming
+	- Code optimization
+	- Network optimization
 	- Beautify the index page + CSS
 
 Not-so-near-future To Do
@@ -129,11 +130,12 @@ main (int argc, char *argv[])
 	struct sockaddr_in server_addr;
 	int server_port = 8080;
 	int use_ipv6 = 0;
+	int use_so_reuseaddr= 0;
 	int opt;
 	strcpy (basedir, ".");
 
 	/* parse argument */
-	while ((opt = getopt (argc, argv, "d:p:6h")) != -1)
+	while ((opt = getopt (argc, argv, "d:p:6rh")) != -1)
 		{
 			switch (opt)
 				{
@@ -146,10 +148,13 @@ main (int argc, char *argv[])
 				case '6':
 					use_ipv6 = 1;
 					break;
+				case 'r':
+					use_so_reuseaddr = 1;
+					break;
 				case 'h':
 					printf ("Usage: %s [-d directory] [-p port]\n", argv[0]);
 					exit (EXIT_SUCCESS);
-				case '?':
+				default:
 					exit (EXIT_FAILURE);
 				}
 		}
@@ -176,11 +181,22 @@ main (int argc, char *argv[])
 			exit (EXIT_FAILURE);
 		}
 
-	/* bind port */
+	/* create a socket */
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons (server_port);
 	server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
 
+	/* set SO_REUSEADDR if specified */
+	if (use_so_reuseaddr)
+		{
+			int optval = 1;
+			if (setsockopt (server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof optval) == -1)
+				{
+					perror ("Error setting SO_REUSEADDR");
+				}
+		}
+
+	/* bind port */
 	if ((bind
 			 (server_sockfd, (const struct sockaddr *) &server_addr,
 				sizeof server_addr)) == -1)
@@ -303,15 +319,12 @@ service_client (void *client_sockfd_ptr)
 		{
 			/* TCP options = NODELAY || CORK */
 			int optval = 1;
-			if (setsockopt
-					((int) client_sockfd, IPPROTO_TCP, TCP_NODELAY, &optval,
-					 sizeof optval) == -1)
+			if (setsockopt ((int) client_sockfd, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof optval) == -1)
 				{
 					perror ("Error seting TCP_NODELAY");
 				}
-			if (setsockopt
-					((int) client_sockfd, IPPROTO_TCP, TCP_CORK, &optval,
-					 sizeof optval) == -1)
+
+			if (setsockopt ((int) client_sockfd, IPPROTO_TCP, TCP_CORK, &optval, sizeof optval) == -1)
 				{
 					perror ("Error seting TCP_CORK");
 				}
