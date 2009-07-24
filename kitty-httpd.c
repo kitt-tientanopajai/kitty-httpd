@@ -109,6 +109,7 @@ Not-so-near-future To Do
 
 #define BACKLOG 16
 #define BUFFER_LEN 1024
+#define VERSION "0.0.4"
 #define SERVER_VERSION "Kitty-HTTPD/0.0.4"
 
 static void *sig_int (int);
@@ -135,7 +136,7 @@ main (int argc, char *argv[])
 	strcpy (basedir, ".");
 
 	/* parse argument */
-	while ((opt = getopt (argc, argv, "d:p:6rh")) != -1)
+	while ((opt = getopt (argc, argv, "d:p:6rvh")) != -1)
 		{
 			switch (opt)
 				{
@@ -151,6 +152,9 @@ main (int argc, char *argv[])
 				case 'r':
 					use_so_reuseaddr = 1;
 					break;
+				case 'v':
+					printf ("%s %s\n", argv[0], VERSION);
+					exit (EXIT_SUCCESS);
 				case 'h':
 					printf ("Usage: %s [-d directory] [-p port]\n", argv[0]);
 					exit (EXIT_SUCCESS);
