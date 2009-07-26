@@ -19,6 +19,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 ChangeLogs
 ----------
+ 
+	- Bugs fixed
+		- The recv loop does not read properly
+		- Free client_sockfd (too many open files)
 
 * Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
 	- Add SO_REUSEADDR 
@@ -84,7 +88,6 @@ Not-so-near-future To Do
 #define _FILE_OFFSET_BITS 64
 #define __USE_LARGEFILE64 1
 #define __USE_FILE_OFFSET64 1
-#define CHUNKSIZE 1073741824
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,7 +111,8 @@ Not-so-near-future To Do
 #include <arpa/inet.h>
 
 #define BACKLOG 16
-#define BUFFER_LEN 1024
+#define BUFFER_SIZE 1024
+#define CHUNK_SIZE 1073741824
 #define VERSION "0.0.4"
 #define SERVER_VERSION "Kitty-HTTPD/0.0.4"
 
@@ -261,28 +265,13 @@ service_client (void *client_sockfd_ptr)
 	int *client_sockfd = (int *) client_sockfd_ptr;
 
 	/* read HTTP request */
-	char buffer[BUFFER_LEN];
+	char buffer[BUFFER_SIZE];
 	char ch;
 	ssize_t recv_len;
 	int i = 0;
 
-	while (((recv_len = recv ((int) client_sockfd, (void *) &ch, 1, 0)) > 0)
-				 && i < BUFFER_LEN)
-		{
-			if (ch == '\r')
-				{
-					continue;
-				}
-			else
-				{
-					buffer[i] = ch;
-					i++;
-					if (ch == '\n')
-						{
-							break;
-						}
-				}
-		}
+	recv_len = recv ((int) client_sockfd, buffer, BUFFER_SIZE, 0);
+	buffer[recv_len] = '\0';
 
 	if (recv_len == 0)
 		{
@@ -293,6 +282,7 @@ service_client (void *client_sockfd_ptr)
 	else if (recv_len == -1)
 		{
 			perror ("Error receiving data");
+			shutdown ((int) client_sockfd, SHUT_RDWR);
 			close ((int) client_sockfd);
 			pthread_exit (NULL);
 		}
@@ -313,7 +303,7 @@ service_client (void *client_sockfd_ptr)
 	/* process the request */
 	char *method = (char *) strtok (buffer, " ");
 	char *URL = (char *) strtok (NULL, " ");
-	char *version = (char *) strtok (NULL, " \n");
+	char *version = (char *) strtok (NULL, "\r\n");
 
 	char header[256];
 	char file[256];
@@ -387,13 +377,13 @@ service_client (void *client_sockfd_ptr)
 
 							do 
 								{
-									xfer_size = sendfile ((int) client_sockfd, fd, &offset, CHUNKSIZE);
+									xfer_size = sendfile ((int) client_sockfd, fd, &offset, CHUNK_SIZE);
 									if (xfer_size == -1)
 										{
 											perror ("Error transfer data");
 											break;
 										}
-									else if ((xfer_size != CHUNKSIZE) && (xfer_size < (file_stat.st_size - total_xfer)))
+									else if ((xfer_size != CHUNK_SIZE) && (xfer_size < (file_stat.st_size - total_xfer)))
 										{
 											// client termination 
 											total_xfer += xfer_size;
@@ -493,6 +483,7 @@ service_client (void *client_sockfd_ptr)
 		}
 
 	shutdown ((int) client_sockfd, SHUT_RDWR);
+	close ((int) client_sockfd);
 	pthread_exit (NULL);
 }
 
