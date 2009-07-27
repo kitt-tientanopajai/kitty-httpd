@@ -246,6 +246,7 @@ main (int argc, char *argv[])
 		}
 
 	shutdown ((int) server_sockfd, SHUT_RDWR);
+	close ((int) server_sockfd);
 	printf ("\nSIGINT received. Server shutdown.\n");
 
 	return 0;
