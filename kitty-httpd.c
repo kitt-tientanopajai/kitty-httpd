@@ -607,7 +607,7 @@ get_mime_type (char *fname)
 	if (ext == NULL)
 		return "application/octet-stream";
 
-	/* Office Document */
+	/* Applications */
 	if (strcasecmp (ext, ".odt") == 0)
 		return "application/vnd.oasis.opendocument.text";
 	if (strcasecmp (ext, ".ott") == 0)
@@ -666,12 +666,12 @@ get_mime_type (char *fname)
 		return "application/vnd.ms-excel";
 	if (strcasecmp (ext, ".ppt") == 0)
 		return "application/vnd.ms-powerpoint";
-	if (strcasecmp (ext, ".rtf") == 0)
-		return "text/rtf";
 	if (strcasecmp (ext, ".pdf") == 0)
 		return "application/pdf";
 	if (strcasecmp (ext, ".dvi") == 0)
 		return "application/x-dvi";
+	if (strcasecmp (ext, ".tex") == 0)
+		return "application/x-tex";
 
 	/* archive */
 	if (strcasecmp (ext, ".tar") == 0)
@@ -681,7 +681,7 @@ get_mime_type (char *fname)
 	if (strcasecmp (ext, ".rar") == 0)
 		return "application/x-rar-compressed";
 
-	/* text-based */
+	/* text */
 	if ((strcasecmp (ext, ".htm") == 0) || (strcasecmp (ext, ".html") == 0))
 		return "text/html";
 	if (strcasecmp (ext, ".css") == 0)
@@ -693,8 +693,8 @@ get_mime_type (char *fname)
 			|| (strcasecmp (ext, ".h") == 0) || (strcasecmp (ext, ".hh") == 0)
 			|| (strcasecmp (ext, ".f") == 0) || (strcasecmp (ext, ".f90") == 0))
 		return "text/plain";
-	if (strcasecmp (ext, ".tex") == 0)
-		return "application/x-tex";
+	if (strcasecmp (ext, ".rtf") == 0)
+		return "text/rtf";
 
 	/* images */
 	if ((strcasecmp (ext, ".jpg") == 0) || (strcasecmp (ext, ".jpeg") == 0))
@@ -714,24 +714,32 @@ get_mime_type (char *fname)
 	if ((strcasecmp (ext, ".mpg") == 0) || (strcasecmp (ext, ".mpeg") == 0)
 			|| (strcasecmp (ext, ".mpe") == 0))
 		return "video/mpeg";
-	if ((strcasecmp (ext, ".ogg") == 0) || (strcasecmp (ext, ".ogm") == 0))
-		return "application/ogg";
+	if (strcasecmp (ext, ".ogv") == 0)
+		return "video/ogg";
 	if (strcasecmp (ext, ".mkv") == 0)
 		return "video/x-matroska";
-	if (strcasecmp (ext, ".mp4") == 0)
+	if ((strcasecmp (ext, ".mp4") == 0) || (strcasecmp (ext, ".f4v") == 0)
+	    || (strcasecmp (ext, ".f4p") == 0))
 		return "video/mp4";
 	if ((strcasecmp (ext, ".mov") == 0) || (strcasecmp (ext, ".qt") == 0))
 		return "video/quicktime";
 	if (strcasecmp (ext, ".swf") == 0)
 		return "application/x-shockwave-flash";
+	if (strcasecmp (ext, ".flv") == 0)
+		return "video/x-flv";
 
 	/* audio */
 	if (strcasecmp (ext, ".wav") == 0)
 		return "audio/x-wav";
 	if (strcasecmp (ext, ".wma") == 0)
-		return "video/x-ms-wma";
+		return "audio/x-ms-wma";
 	if ((strcasecmp (ext, ".mp3") == 0) || (strcasecmp (ext, ".mp2") == 0))
 		return "audio/mpeg";
+	if ((strcasecmp (ext, ".m4a") == 0) || (strcasecmp (ext, ".m4b") == 0)
+	    || (strcasecmp (ext, ".f4a") == 0) || (strcasecmp (ext, ".f4b") == 0))
+		return "audio/mp4";
+	if ((strcasecmp (ext, ".oga") == 0) || (strcasecmp (ext, ".ogg") == 0))
+		return "audio/ogg";
 
 	/* fallback */
 	return "application/octet-stream";
