@@ -133,11 +133,11 @@ main (int argc, char *argv[])
 {
 	int server_sockfd;
 	struct sockaddr_in server_addr;
-	int server_port = 8080;
+	unsigned short server_port = 8080;
 	int use_ipv6 = 0;
 	int use_so_reuseaddr= 0;
 	int opt;
-	strcpy (basedir, ".");
+	strncpy (basedir, ".", 1);
 
 	/* parse argument */
 	while ((opt = getopt (argc, argv, "d:p:6rvh")) != -1)
@@ -145,7 +145,8 @@ main (int argc, char *argv[])
 			switch (opt)
 				{
 				case 'd':
-					strcpy (basedir, optarg);
+					strncpy (basedir, optarg, (sizeof basedir) - 1);
+					basedir[(sizeof basedir) - 1] = '\0';
 					break;
 				case 'p':
 					server_port = atoi (optarg);
@@ -310,7 +311,7 @@ service_client (void *client_sockfd_ptr)
 	char file[256];
 	ssize_t xfer_size = 0;
 
-	if (strcmp (method, "GET") == 0)
+	if (strncmp (method, "GET", 3) == 0)
 		{
 			/* TCP options = NODELAY || CORK */
 			int optval = 1;
@@ -325,16 +326,18 @@ service_client (void *client_sockfd_ptr)
 				}
 
 			unescape (URL);
-			sprintf (file, "%s/%s", basedir, URL);
+			snprintf (file, (sizeof file) - 1, "%s/%s", basedir, URL);
+			file[255] = '\0';
 			int fd = open (file, O_RDONLY);
 			if (fd == -1)
 				{
 					switch (errno)
 						{
 						case EACCES:				/* 403 Forbidden */
-							sprintf (header,
+							snprintf (header, (sizeof header - 1),
 											 "%s 403 Forbidden\n\n<html><body><h1>403 Forbidden</h1><hr>%s</body></html>",
 											 version, SERVER_VERSION);
+							header[(sizeof header) - 1] = '\0';
 							xfer_size =
 								send ((int) client_sockfd, header, strlen (header), 0);
 							printf ("%s: %s %s %s %s 403 Forbidden %d\n", timestamp,
@@ -342,9 +345,10 @@ service_client (void *client_sockfd_ptr)
 											xfer_size);
 							break;
 						case ENOENT:				/* 404 Not Found */
-							sprintf (header,
+							snprintf (header, (sizeof header - 1),
 											 "%s 404 Not Found\n\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
 											 version, SERVER_VERSION);
+							header[(sizeof header) - 1] = '\0';
 							xfer_size =
 								send ((int) client_sockfd, header, strlen (header), 0);
 							printf ("%s: %s %s %s %s 404 Not Found %d\n", timestamp,
@@ -352,9 +356,10 @@ service_client (void *client_sockfd_ptr)
 											xfer_size);
 							break;
 						default:						/* 400 Bad Request */
-							sprintf (header,
+							snprintf (header, (sizeof header - 1),
 											 "%s 400 Bad Request\n\n<html><body><h1>400 Bad Request</h1><hr>%s</body></html>",
 											 version, SERVER_VERSION);
+							header[(sizeof header) - 1] = '\0';
 							xfer_size =
 								send ((int) client_sockfd, header, strlen (header), 0);
 							printf ("%s: %s %s %s %s 400 Bad Request %d\n", timestamp,
@@ -368,11 +373,13 @@ service_client (void *client_sockfd_ptr)
 					fstat (fd, &file_stat);
 					if (S_ISREG (file_stat.st_mode))
 						{
-							sprintf (header,
+							snprintf (header, (sizeof header - 1),
 											 "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: %s\nContent-Length: %llu\n\n",
 											 version, timestamp, SERVER_VERSION,
 											 get_mime_type (URL), (uint64_t) file_stat.st_size);
+							header[(sizeof header) - 1] = '\0';
 							send ((int) client_sockfd, header, strlen (header), 0);
+
 							off_t offset = 0;
 							uint64_t total_xfer = 0;
 
@@ -404,7 +411,8 @@ service_client (void *client_sockfd_ptr)
 					else if (S_ISDIR (file_stat.st_mode))
 						{
 							/* index.html exists ? */
-							sprintf (file, "%s/index.html", basedir);
+							snprintf (file, (sizeof file) - 1, "%s/index.html", basedir);
+							file[(sizeof file) - 1] = '\0';
 							int index_fd = open (file, O_RDONLY);
 							if (index_fd == -1)
 								{
@@ -412,9 +420,10 @@ service_client (void *client_sockfd_ptr)
 
 									if (index_page == NULL)
 										{
-											sprintf (header,
+											snprintf (header, (sizeof header) - 1,
 															 "%s 500 Internal Server Error\n\n<html><body><h1>500 Internal Server Error</h1><hr>%s</body></html>",
 															 version, SERVER_VERSION);
+											header[(sizeof header) - 1] = '\0';
 											xfer_size =
 												send ((int) client_sockfd, header, strlen (header),
 															0);
@@ -425,10 +434,11 @@ service_client (void *client_sockfd_ptr)
 										}
 									else
 										{
-											sprintf (header,
+											snprintf (header, (sizeof header) - 1,
 															 "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: %s\nContent-Length: %d\n\n",
 															 version, timestamp, SERVER_VERSION,
 															 "text/html", strlen (index_page));
+											header[(sizeof header) - 1] = '\0';
 											send ((int) client_sockfd, header, strlen (header), 0);
 											xfer_size =
 												send ((int) client_sockfd, index_page,
@@ -445,10 +455,11 @@ service_client (void *client_sockfd_ptr)
 								{
 									struct stat index_file_stat;
 									fstat (index_fd, &index_file_stat);
-									sprintf (header,
+									snprintf (header, (sizeof header) - 1,
 													 "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: text/html\nContent-Length: %llu\n\n",
 													 version, timestamp, SERVER_VERSION,
 													 (uint64_t) index_file_stat.st_size);
+									header[(sizeof header) - 1] = '\0';
 									send ((int) client_sockfd, header, strlen (header), 0);
 									off_t offset = 0;
 									xfer_size =
@@ -466,8 +477,9 @@ service_client (void *client_sockfd_ptr)
 		}
 	else if (strcmp (method, "HEAD") == 0)
 		{
-			sprintf (header, "%s 200 OK\nDate: %s\nServer: %s\n\n", version,
+			snprintf (header, (sizeof header) - 1, "%s 200 OK\nDate: %s\nServer: %s\n\n", version,
 							 timestamp, SERVER_VERSION);
+			header[(sizeof header) - 1] =	 '\0';
 			xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
 			printf ("%s: %s %s %s %s 200 OK %d\n", timestamp,
 							inet_ntoa (client.sin_addr), method, URL, version, xfer_size);
@@ -475,9 +487,10 @@ service_client (void *client_sockfd_ptr)
 	else
 		{
 			/* 501 Not Implemented */
-			sprintf (header,
+			snprintf (header, (sizeof header) - 1,
 							 "%s 501 Not Implemented\nDate: %sServer: %s\n\n<html><body><h1>501 Not Implemented</h1><hr>%s</body></html>",
 							 version, timestamp, SERVER_VERSION, SERVER_VERSION);
+			header[(sizeof header) - 1] = '\0';
 			xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
 			printf ("%s: %s %s %s %s 501 Not Implemented %d\n", timestamp,
 							inet_ntoa (client.sin_addr), method, URL, version, xfer_size);
@@ -507,7 +520,8 @@ get_index_page (char *URL)
 		URL[strlen (URL) - 1] = '\0';
 
 
-	sprintf (path, "%s%s", basedir, URL);
+	snprintf (path, (sizeof path) - 1, "%s%s", basedir, URL);
+	path[(sizeof path) - 1] = '\0';
 	if ((n = scandir (path, &dir_entry, 0, alphasort)) == -1)
 		{
 			perror ("Error scanning directory");
@@ -528,7 +542,7 @@ get_index_page (char *URL)
 					int i, l;
 
 					l =
-						sprintf (ptr,
+						snprintf (ptr, 512,
 										 "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><table>",
 										 URL, URL);
 					ptr += (l * sizeof (char));
@@ -538,7 +552,8 @@ get_index_page (char *URL)
 							char filename[512];
 							struct stat file_stat;
 
-							sprintf (filename, "%s/%s", path, dir_entry[i]->d_name);
+							snprintf (filename, (sizeof filename) - 1, "%s/%s", path, dir_entry[i]->d_name);
+							filename[(sizeof filename) - 1] = '\0';
 							if (stat (filename, &file_stat) == -1)
 								{
 									perror ("Error stat file");
@@ -554,7 +569,7 @@ get_index_page (char *URL)
 									if (S_ISREG (file_stat.st_mode))
 										{
 											l =
-												sprintf (ptr,
+												snprintf (ptr, 512,
 																 "<tr><td>[FILE]</td><td><a href=\"%s/%s\">%s</a></td><td>%s</td><td>%llu</td></tr>\n",
 																 URL, dir_entry[i]->d_name,
 																 dir_entry[i]->d_name, last_modified,
@@ -564,7 +579,7 @@ get_index_page (char *URL)
 									else if (S_ISDIR (file_stat.st_mode))
 										{
 											l =
-												sprintf (ptr,
+												snprintf (ptr, 512,
 																 "<tr><td>[DIR]</td><td><a href=\"%s/%s\">%s</a></td><td>%s</td><td>-</td></tr>\n",
 																 URL, dir_entry[i]->d_name,
 																 dir_entry[i]->d_name, last_modified);
@@ -574,7 +589,7 @@ get_index_page (char *URL)
 								}
 						}
 
-					l = sprintf (ptr, "</table><hr>%s</body></html>", SERVER_VERSION);
+					l = snprintf (ptr, 64, "</table><hr>%s</body></html>", SERVER_VERSION);
 					ptr += (l * sizeof (char));
 
 					return index_page;
@@ -591,73 +606,8 @@ get_mime_type (char *fname)
 
 	if (ext == NULL)
 		return "application/octet-stream";
-	if (strcasecmp (ext, ".doc") == 0)
-		return "application/msword";
-	if (strcasecmp (ext, ".xls") == 0)
-		return "application/vnd.ms-excel";
-	if (strcasecmp (ext, ".ppt") == 0)
-		return "application/vnd.ms-powerpoint";
-	if (strcasecmp (ext, ".pdf") == 0)
-		return "application/pdf";
-	if (strcasecmp (ext, ".dvi") == 0)
-		return "application/x-dvi";
-	if (strcasecmp (ext, ".swf") == 0)
-		return "application/x-shockwave-flash";
-	if (strcasecmp (ext, ".tex") == 0)
-		return "application/x-tex";
-	if (strcasecmp (ext, ".tar") == 0)
-		return "application/x-tar";
-	if (strcasecmp (ext, ".zip") == 0)
-		return "application/zip";
-	if (strcasecmp (ext, ".rar") == 0)
-		return "application/x-rar-compressed";
-	if ((strcasecmp (ext, ".ogg") == 0) || (strcasecmp (ext, ".ogm") == 0))
-		return "application/ogg";
 
-	if ((strcasecmp (ext, ".htm") == 0) || (strcasecmp (ext, ".html") == 0))
-		return "text/html";
-	if (strcasecmp (ext, ".css") == 0)
-		return "text/css";
-	if (strcasecmp (ext, ".xml") == 0)
-		return "text/xml";
-	if ((strcasecmp (ext, ".txt") == 0) || (strcasecmp (ext, ".asc") == 0)
-			|| (strcasecmp (ext, ".c") == 0) || (strcasecmp (ext, ".cpp") == 0)
-			|| (strcasecmp (ext, ".h") == 0) || (strcasecmp (ext, ".hh") == 0)
-			|| (strcasecmp (ext, ".f") == 0) || (strcasecmp (ext, ".f90") == 0))
-		return "text/plain";
-	if (strcasecmp (ext, ".rtf") == 0)
-		return "text/rtf";
-
-	if ((strcasecmp (ext, ".jpg") == 0) || (strcasecmp (ext, ".jpeg") == 0))
-		return "image/jpeg";
-	if ((strcasecmp (ext, ".tif") == 0) || (strcasecmp (ext, ".tiff") == 0))
-		return "image/tiff";
-	if (strcasecmp (ext, ".gif") == 0)
-		return "image/gif";
-	if (strcasecmp (ext, ".png") == 0)
-		return "image/png";
-
-	if (strcasecmp (ext, ".avi") == 0)
-		return "video/x-msvideo";
-	if (strcasecmp (ext, ".wmv") == 0)
-		return "video/x-ms-wmv";
-	if ((strcasecmp (ext, ".mpg") == 0) || (strcasecmp (ext, ".mpeg") == 0)
-			|| (strcasecmp (ext, "mpe") == 0))
-		return "video/mpeg";
-	if (strcasecmp (ext, ".mkv") == 0)
-		return "video/x-matroska";
-	if (strcasecmp (ext, ".mp4") == 0)
-		return "video/mp4";
-	if ((strcasecmp (ext, ".mov") == 0) || (strcasecmp (ext, ".qt") == 0))
-		return "video/quicktime";
-
-	if (strcasecmp (ext, ".wav") == 0)
-		return "audio/x-wav";
-	if (strcasecmp (ext, ".wma") == 0)
-		return "video/x-ms-wma";
-	if ((strcasecmp (ext, ".mp3") == 0) || (strcasecmp (ext, ".mp2") == 0))
-		return "audio/mpeg";
-
+	/* Office Document */
 	if (strcasecmp (ext, ".odt") == 0)
 		return "application/vnd.oasis.opendocument.text";
 	if (strcasecmp (ext, ".ott") == 0)
@@ -690,7 +640,6 @@ get_mime_type (char *fname)
 		return "application/vnd.oasis.opendocument.text-master";
 	if (strcasecmp (ext, ".oth") == 0)
 		return "application/vnd.oasis.opendocument.text-web";
-
 	if (strcasecmp (ext, ".sxw") == 0)
 		return "application/vnd.sun.xml.writer";
 	if (strcasecmp (ext, ".sxw") == 0)
@@ -711,7 +660,80 @@ get_mime_type (char *fname)
 		return "application/vnd.sun.xml.draw.template";
 	if (strcasecmp (ext, ".sxw") == 0)
 		return "application/vnd.sun.xml.math";
+	if (strcasecmp (ext, ".doc") == 0)
+		return "application/msword";
+	if (strcasecmp (ext, ".xls") == 0)
+		return "application/vnd.ms-excel";
+	if (strcasecmp (ext, ".ppt") == 0)
+		return "application/vnd.ms-powerpoint";
+	if (strcasecmp (ext, ".rtf") == 0)
+		return "text/rtf";
+	if (strcasecmp (ext, ".pdf") == 0)
+		return "application/pdf";
+	if (strcasecmp (ext, ".dvi") == 0)
+		return "application/x-dvi";
 
+	/* archive */
+	if (strcasecmp (ext, ".tar") == 0)
+		return "application/x-tar";
+	if (strcasecmp (ext, ".zip") == 0)
+		return "application/zip";
+	if (strcasecmp (ext, ".rar") == 0)
+		return "application/x-rar-compressed";
+
+	/* text-based */
+	if ((strcasecmp (ext, ".htm") == 0) || (strcasecmp (ext, ".html") == 0))
+		return "text/html";
+	if (strcasecmp (ext, ".css") == 0)
+		return "text/css";
+	if (strcasecmp (ext, ".xml") == 0)
+		return "text/xml";
+	if ((strcasecmp (ext, ".txt") == 0) || (strcasecmp (ext, ".asc") == 0)
+			|| (strcasecmp (ext, ".c") == 0) || (strcasecmp (ext, ".cpp") == 0)
+			|| (strcasecmp (ext, ".h") == 0) || (strcasecmp (ext, ".hh") == 0)
+			|| (strcasecmp (ext, ".f") == 0) || (strcasecmp (ext, ".f90") == 0))
+		return "text/plain";
+	if (strcasecmp (ext, ".tex") == 0)
+		return "application/x-tex";
+
+	/* images */
+	if ((strcasecmp (ext, ".jpg") == 0) || (strcasecmp (ext, ".jpeg") == 0))
+		return "image/jpeg";
+	if ((strcasecmp (ext, ".tif") == 0) || (strcasecmp (ext, ".tiff") == 0))
+		return "image/tiff";
+	if (strcasecmp (ext, ".gif") == 0)
+		return "image/gif";
+	if (strcasecmp (ext, ".png") == 0)
+		return "image/png";
+
+	/* video */
+	if (strcasecmp (ext, ".avi") == 0)
+		return "video/x-msvideo";
+	if (strcasecmp (ext, ".wmv") == 0)
+		return "video/x-ms-wmv";
+	if ((strcasecmp (ext, ".mpg") == 0) || (strcasecmp (ext, ".mpeg") == 0)
+			|| (strcasecmp (ext, ".mpe") == 0))
+		return "video/mpeg";
+	if ((strcasecmp (ext, ".ogg") == 0) || (strcasecmp (ext, ".ogm") == 0))
+		return "application/ogg";
+	if (strcasecmp (ext, ".mkv") == 0)
+		return "video/x-matroska";
+	if (strcasecmp (ext, ".mp4") == 0)
+		return "video/mp4";
+	if ((strcasecmp (ext, ".mov") == 0) || (strcasecmp (ext, ".qt") == 0))
+		return "video/quicktime";
+	if (strcasecmp (ext, ".swf") == 0)
+		return "application/x-shockwave-flash";
+
+	/* audio */
+	if (strcasecmp (ext, ".wav") == 0)
+		return "audio/x-wav";
+	if (strcasecmp (ext, ".wma") == 0)
+		return "video/x-ms-wma";
+	if ((strcasecmp (ext, ".mp3") == 0) || (strcasecmp (ext, ".mp2") == 0))
+		return "audio/mpeg";
+
+	/* fallback */
 	return "application/octet-stream";
 }
 
