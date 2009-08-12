@@ -146,7 +146,7 @@ main (int argc, char *argv[])
   strncpy (basedir, ".", 1);
 
   /* parse argument */
-  while ((opt = getopt (argc, argv, "6d:ip:rvh")) != -1)
+  while ((opt = getopt (argc, argv, "6d:hip:rv")) != -1)
     {
       switch (opt)
         {
@@ -157,6 +157,10 @@ main (int argc, char *argv[])
           strncpy (basedir, optarg, (sizeof basedir) - 1);
           basedir[(sizeof basedir) - 1] = '\0';
           break;
+        case 'h':
+          printf ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-v]\n",
+                  argv[0]);
+          exit (EXIT_SUCCESS);
         case 'i':
           use_dir_index = 1;
           break;
@@ -168,10 +172,6 @@ main (int argc, char *argv[])
           break;
         case 'v':
           printf ("%s %s\n", argv[0], VERSION);
-          exit (EXIT_SUCCESS);
-        case 'h':
-          printf ("Usage: %s [-d directory] [-h] [-i] [-p port] [-v]\n",
-                  argv[0]);
           exit (EXIT_SUCCESS);
         default:
           exit (EXIT_FAILURE);
