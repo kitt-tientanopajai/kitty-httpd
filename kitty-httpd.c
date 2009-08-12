@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
  
+  - Add IPv6 support
   - Add option -i for directory index
   - Add option -v for version
   - Cleanup indent & re-tab
@@ -71,7 +72,6 @@ ChangeLogs
 Known Issues
 ------------
   - Large number of requests may cause segfault if index.html does not exist.
-  - Unable to create a service thread should return 503
 
 To Do
 -----
@@ -80,7 +80,6 @@ To Do
   - Default favicon.ico
   - Log to file option
   - Foreground & background mode
-  - IPv6 supported
   - Secure programming
   - Code optimization
   - Network optimization
@@ -116,6 +115,7 @@ Not-so-near-future To Do
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #define BACKLOG 16
 #define BUFFER_SIZE 1024
@@ -138,18 +138,21 @@ int
 main (int argc, char *argv[])
 {
   int server_sockfd;
-  struct sockaddr_in server_addr;
+  struct sockaddr_in6 server_addr;
   unsigned short server_port = 8080;
-  int use_ipv6 = 0;
+  int use_ipv6_only = 0;
   int use_so_reuseaddr = 0;
   int opt;
   strncpy (basedir, ".", 1);
 
   /* parse argument */
-  while ((opt = getopt (argc, argv, "d:ip:6rvh")) != -1)
+  while ((opt = getopt (argc, argv, "6d:ip:rvh")) != -1)
     {
       switch (opt)
         {
+        case '6':
+          use_ipv6_only = 1;
+          break;
         case 'd':
           strncpy (basedir, optarg, (sizeof basedir) - 1);
           basedir[(sizeof basedir) - 1] = '\0';
@@ -160,9 +163,6 @@ main (int argc, char *argv[])
         case 'p':
           server_port = atoi (optarg);
           break;
-        case '6':
-          use_ipv6 = 1;
-          break;
         case 'r':
           use_so_reuseaddr = 1;
           break;
@@ -170,7 +170,8 @@ main (int argc, char *argv[])
           printf ("%s %s\n", argv[0], VERSION);
           exit (EXIT_SUCCESS);
         case 'h':
-          printf ("Usage: %s [-d directory] [-h] [-i] [-p port] [-v]\n", argv[0]);
+          printf ("Usage: %s [-d directory] [-h] [-i] [-p port] [-v]\n",
+                  argv[0]);
           exit (EXIT_SUCCESS);
         default:
           exit (EXIT_FAILURE);
@@ -194,32 +195,35 @@ main (int argc, char *argv[])
   siginterrupt (SIGINT, 1);
 
   /* create socket */
-  if ((server_sockfd = socket (PF_INET, SOCK_STREAM, 0)) == -1)
+  if ((server_sockfd = socket (PF_INET6, SOCK_STREAM, 0)) == -1)
     {
       perror ("Error opening socket");
       exit (EXIT_FAILURE);
     }
 
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_port = htons (server_port);
-  server_addr.sin_addr.s_addr = htonl (INADDR_ANY);
+  server_addr.sin6_family = AF_INET6;
+  server_addr.sin6_port = htons (server_port);
+  server_addr.sin6_addr = in6addr_any;
 
-  /* set SO_REUSEADDR if specified */
-  if (use_so_reuseaddr)
+  if (setsockopt
+      (server_sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &use_ipv6_only,
+       sizeof use_ipv6_only) == -1)
     {
-      int optval = 1;
-      if (setsockopt
-          (server_sockfd, SOL_SOCKET, SO_REUSEADDR, &optval,
-           sizeof optval) == -1)
-        {
+      perror ("Error setting SO_REUSEADDR");
+    }
+
+
+  if (setsockopt
+      (server_sockfd, SOL_SOCKET, SO_REUSEADDR, &use_so_reuseaddr,
+       sizeof use_so_reuseaddr) == -1)
+    {
           perror ("Error setting SO_REUSEADDR");
-        }
     }
 
   /* bind port */
   if ((bind
        (server_sockfd, (const struct sockaddr *) &server_addr,
-        sizeof server_addr)) == -1)
+        sizeof (struct sockaddr_in6))) == -1)
     {
       perror ("Error binding port");
       exit (EXIT_FAILURE);
@@ -239,7 +243,7 @@ main (int argc, char *argv[])
   while (!stop)
     {
       int client_sockfd;
-      struct sockaddr_in client_addr;
+      struct sockaddr_in6 client_addr;
       socklen_t client_addr_len = sizeof client_addr;
 
       if ((client_sockfd =
@@ -314,9 +318,13 @@ service_client (void *client_sockfd_ptr)
   strftime (timestamp, sizeof timestamp, "%a, %d %b %Y %H:%M:%S %Z", now_tm);
 
   /* get peer address */
-  struct sockaddr_in client;
-  socklen_t client_len = sizeof client;
-  getpeername ((int) client_sockfd, (struct sockaddr *) &client, &client_len);
+  struct sockaddr_storage client_ss;
+  socklen_t client_len = sizeof client_ss;
+  char peer[NI_MAXHOST];
+  getpeername ((int) client_sockfd, (struct sockaddr *) &client_ss,
+               &client_len);
+  getnameinfo ((struct sockaddr *) &client_ss, client_len, peer, sizeof peer,
+               NULL, 0, NI_NUMERICHOST);
 
   /* process the request */
   char *method = (char *) strtok (buffer, " ");
@@ -360,9 +368,8 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              printf ("%s: %s %s %s %s 403 Forbidden %d\n", timestamp,
-                      inet_ntoa (client.sin_addr), method, URL, version,
-                      xfer_size);
+              printf ("%s: %s %s %s %s 403 Forbidden %d\n", timestamp, peer,
+                      method, URL, version, xfer_size);
               break;
             case ENOENT:        /* 404 Not Found */
               snprintf (header, (sizeof header - 1),
@@ -371,9 +378,8 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              printf ("%s: %s %s %s %s 404 Not Found %d\n", timestamp,
-                      inet_ntoa (client.sin_addr), method, URL, version,
-                      xfer_size);
+              printf ("%s: %s %s %s %s 404 Not Found %d\n", timestamp, peer,
+                      method, URL, version, xfer_size);
               break;
             default:            /* 400 Bad Request */
               snprintf (header, (sizeof header - 1),
@@ -382,9 +388,8 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              printf ("%s: %s %s %s %s 400 Bad Request %d\n", timestamp,
-                      inet_ntoa (client.sin_addr), method, URL, version,
-                      xfer_size);
+              printf ("%s: %s %s %s %s 400 Bad Request %d\n", timestamp, peer,
+                      method, URL, version, xfer_size);
             }
         }
       else
@@ -426,9 +431,8 @@ service_client (void *client_sockfd_ptr)
                 }
               while (total_xfer < file_stat.st_size);
 
-              printf ("%s: %s %s %s %s 200 OK %llu\n", timestamp,
-                      inet_ntoa (client.sin_addr), method, URL, version,
-                      total_xfer);
+              printf ("%s: %s %s %s %s 200 OK %llu\n", timestamp, peer,
+                      method, URL, version, total_xfer);
             }
           else if (S_ISDIR (file_stat.st_mode))
             {
@@ -453,8 +457,8 @@ service_client (void *client_sockfd_ptr)
                                   strlen (header), 0);
                           printf
                             ("%s: %s %s %s %s 503 Service Unavailable %d\n",
-                             timestamp, inet_ntoa (client.sin_addr), method,
-                             URL, version, xfer_size);
+                             timestamp, peer, method, URL, version,
+                             xfer_size);
                         }
                       else
                         {
@@ -470,8 +474,7 @@ service_client (void *client_sockfd_ptr)
                                   strlen (index_page), 0);
 
                           printf ("%s: %s %s %s %s 200 OK %d\n", timestamp,
-                                  inet_ntoa (client.sin_addr), method, URL,
-                                  version, xfer_size);
+                                  peer, method, URL, version, xfer_size);
 
                           free (index_page);
                         }
@@ -486,8 +489,7 @@ service_client (void *client_sockfd_ptr)
                         send ((int) client_sockfd, header, strlen (header),
                               0);
                       printf ("%s: %s %s %s %s 404 Not Found %d\n", timestamp,
-                              inet_ntoa (client.sin_addr), method, URL,
-                              version, xfer_size);
+                              peer, method, URL, version, xfer_size);
                     }
                 }
               else
@@ -504,10 +506,8 @@ service_client (void *client_sockfd_ptr)
                   xfer_size =
                     sendfile ((int) client_sockfd, index_fd, &offset,
                               index_file_stat.st_size);
-
-                  printf ("%s: %s %s %s %s 200 OK %d\n", timestamp,
-                          inet_ntoa (client.sin_addr), method, URL, version,
-                          xfer_size);
+                  printf ("%s: %s %s %s %s 200 OK %d\n", timestamp, peer,
+                          method, URL, version, xfer_size);
                   close (index_fd);
                 }
             }
@@ -521,8 +521,8 @@ service_client (void *client_sockfd_ptr)
                 SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
-      printf ("%s: %s %s %s %s 200 OK %d\n", timestamp,
-              inet_ntoa (client.sin_addr), method, URL, version, xfer_size);
+      printf ("%s: %s %s %s %s 200 OK %d\n", timestamp, peer, method, URL,
+              version, xfer_size);
     }
   else
     {
@@ -532,8 +532,8 @@ service_client (void *client_sockfd_ptr)
                 version, timestamp, SERVER_VERSION, SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
-      printf ("%s: %s %s %s %s 501 Not Implemented %d\n", timestamp,
-              inet_ntoa (client.sin_addr), method, URL, version, xfer_size);
+      printf ("%s: %s %s %s %s 501 Not Implemented %d\n", timestamp, peer,
+              method, URL, version, xfer_size);
     }
 
   shutdown ((int) client_sockfd, SHUT_RDWR);
