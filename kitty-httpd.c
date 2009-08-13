@@ -30,6 +30,7 @@ ChangeLogs
     - Client termination may cause broken pipe (SIGPIPE)
       - Ref: Neutron Soutmun
     - Properly close client socket if a thread cannot be created.
+    - GET / does not log URL properly when use_directory_index = 1
 
 * Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
   - Add SO_REUSEADDR 
@@ -71,7 +72,7 @@ ChangeLogs
 
 Known Issues
 ------------
-  - Large number of requests may cause segfault if index.html does not exist.
+  - Large number of requests may cause segfault if index.html does not exist
 
 To Do
 -----
@@ -292,6 +293,7 @@ service_client (void *client_sockfd_ptr)
   ssize_t recv_len;
   int i = 0;
 
+  memset (buffer, '\0', BUFFER_SIZE);
   recv_len = recv ((int) client_sockfd, buffer, BUFFER_SIZE, 0);
   buffer[recv_len] = '\0';
 
@@ -547,19 +549,22 @@ service_client (void *client_sockfd_ptr)
  * */
 
 static char *
-get_index_page (char *URL)
+get_index_page (char *orig_URL)
 {
   struct dirent **dir_entry;
   char path[256];
+  char URL[256];
   int n;
 
   if (URL == NULL)
     return NULL;
 
+  memset(URL, '\0', sizeof URL);
+  strncpy (URL, orig_URL, strlen (orig_URL));
   if (URL[strlen (URL) - 1] == '/')
     URL[strlen (URL) - 1] = '\0';
 
-
+  memset (path, '\0', sizeof path);
   snprintf (path, (sizeof path) - 1, "%s%s", basedir, URL);
   path[(sizeof path) - 1] = '\0';
   if ((n = scandir (path, &dir_entry, 0, alphasort)) == -1)
