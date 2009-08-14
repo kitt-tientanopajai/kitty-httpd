@@ -159,8 +159,9 @@ main (int argc, char *argv[])
           basedir[(sizeof basedir) - 1] = '\0';
           break;
         case 'h':
-          printf ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-v]\n",
-                  argv[0]);
+          printf
+            ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-v]\n",
+             argv[0]);
           exit (EXIT_SUCCESS);
         case 'i':
           use_dir_index = 1;
@@ -218,7 +219,7 @@ main (int argc, char *argv[])
       (server_sockfd, SOL_SOCKET, SO_REUSEADDR, &use_so_reuseaddr,
        sizeof use_so_reuseaddr) == -1)
     {
-          perror ("Error setting SO_REUSEADDR");
+      perror ("Error setting SO_REUSEADDR");
     }
 
   /* bind port */
@@ -312,12 +313,10 @@ service_client (void *client_sockfd_ptr)
     }
 
   /* get current time */
-  char timestamp[128];
-  time_t now;
-  struct tm *now_tm;
-  now = time (NULL);
-  now_tm = localtime (&now);
-  strftime (timestamp, sizeof timestamp, "%a, %d %b %Y %H:%M:%S %Z", now_tm);
+  char timestamp[30];
+  time_t now = time (NULL);
+  strftime (timestamp, sizeof timestamp, "%a %d %b %Y %T %Z",
+            localtime (&now));
 
   /* get peer address */
   struct sockaddr_storage client_ss;
@@ -559,7 +558,7 @@ get_index_page (char *orig_URL)
   if (URL == NULL)
     return NULL;
 
-  memset(URL, '\0', sizeof URL);
+  memset (URL, '\0', sizeof URL);
   strncpy (URL, orig_URL, strlen (orig_URL));
   if (URL[strlen (URL) - 1] == '/')
     URL[strlen (URL) - 1] = '\0';
@@ -588,7 +587,7 @@ get_index_page (char *orig_URL)
 
           l =
             snprintf (ptr, 512,
-                      "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><table>",
+                      "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><pre>",
                       URL, URL);
           ptr += (l * sizeof (char));
 
@@ -607,28 +606,37 @@ get_index_page (char *orig_URL)
                 }
               else
                 {
+                  if ((dir_entry[i]->d_name[0] == '.')
+                      && (dir_entry[i]->d_name[1] != '.')
+                      && (dir_entry[i]->d_name[1] != '\0'))
+                    continue;
+
                   char last_modified[32];
-                  struct tm *last_modified_tm =
-                    localtime (&file_stat.st_mtime);
                   strftime (last_modified, sizeof last_modified,
-                            "%F %H:%M:%S %z", last_modified_tm);
+                            "%F %T %Z", localtime (&file_stat.st_mtime));
                   if (S_ISREG (file_stat.st_mode))
                     {
+                      int spaces = 40 - strlen (dir_entry[i]->d_name);
+                      spaces = (spaces < 1 ? 1 : spaces);
                       l =
-                        snprintf (ptr, 512,
-                                  "<tr><td>[FILE]</td><td><a href=\"%s/%s\">%s</a></td><td>%s</td><td>%llu</td></tr>\n",
+                        snprintf (ptr, 256,
+                                  "[   ] <a href=\"%s/%s\">%-.39s</a>%*s%s %llu\n",
                                   URL, dir_entry[i]->d_name,
-                                  dir_entry[i]->d_name, last_modified,
+                                  dir_entry[i]->d_name, spaces, " ",
+                                  last_modified,
                                   (uint64_t) file_stat.st_size);
                       ptr += (l * sizeof (char));
                     }
                   else if (S_ISDIR (file_stat.st_mode))
                     {
+                      int spaces = 40 - strlen (dir_entry[i]->d_name);
+                      spaces = (spaces < 1 ? 1 : spaces);
                       l =
-                        snprintf (ptr, 512,
-                                  "<tr><td>[DIR]</td><td><a href=\"%s/%s\">%s</a></td><td>%s</td><td>-</td></tr>\n",
+                        snprintf (ptr, 256,
+                                  "[DIR] <a href=\"%s/%s\">%-.39s</a>%*s%s -\n",
                                   URL, dir_entry[i]->d_name,
-                                  dir_entry[i]->d_name, last_modified);
+                                  dir_entry[i]->d_name, spaces, " ",
+                                  last_modified);
                       ptr += (l * sizeof (char));
                     }
 
@@ -636,10 +644,10 @@ get_index_page (char *orig_URL)
             }
 
           l =
-            snprintf (ptr, 64, "</table><hr>%s</body></html>",
-                      SERVER_VERSION);
+            snprintf (ptr, 48, "</pre><hr>%s</body></html>", SERVER_VERSION);
           ptr += (l * sizeof (char));
 
+          free (dir_entry);
           return index_page;
         }
     }
