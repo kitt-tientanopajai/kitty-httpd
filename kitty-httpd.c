@@ -188,15 +188,23 @@ main (int argc, char *argv[])
   openlog ("kitty-http", LOG_CONS | LOG_NDELAY | LOG_NOWAIT | LOG_PERROR | LOG_PID, LOG_LOCAL0);
 
   /* test basedir */
-  int bd;
-  if ((bd = open (basedir, O_RDONLY)) == -1)
+  char cwd[PATH_MAX];
+  if (getcwd (cwd, PATH_MAX) == NULL)
     {
-      syslog (LOG_INFO, "error opening base directory %m");
+      syslog (LOG_INFO, "error %m");
       exit (EXIT_FAILURE);
     }
-  else
+
+  if (chdir (basedir) == -1)
     {
-      close (bd);
+      syslog (LOG_INFO, "error cannot change working directory %m");
+      exit (EXIT_FAILURE);
+    } 
+
+  if (getcwd (basedir, PATH_MAX) == NULL)
+    {
+      syslog (LOG_INFO, "error %m");
+      exit (EXIT_FAILURE);
     }
 
   /* signal handler */
@@ -278,8 +286,12 @@ main (int argc, char *argv[])
 
   shutdown ((int) server_sockfd, SHUT_RDWR);
   close ((int) server_sockfd);
+  printf ("\n");
   syslog (LOG_INFO, "SIGINT received, server shutdown.");
   closelog ();
+
+  if (chdir (cwd) == -1)
+    syslog (LOG_INFO, "error %m");
 
   return 0;
 }
