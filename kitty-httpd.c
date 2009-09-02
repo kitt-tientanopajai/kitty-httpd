@@ -123,8 +123,10 @@ Not-so-near-future To Do
 #define BACKLOG 16
 #define BUFFER_SIZE 1024
 #define CHUNK_SIZE 1073741824
-#define VERSION "0.0.5a"
-#define SERVER_VERSION "Kitty-HTTPD/0.0.5a"
+#define HEADER_MAX 256
+#define URL_MAX 256
+#define VERSION "0.0.5b"
+#define SERVER_VERSION "Kitty-HTTPD/0.0.5b"
 
 static void *sig_int (int);
 static void *service_client (void *);
@@ -133,7 +135,7 @@ static char *get_mime_type (char *);
 void unescape (char *);
 static int hex (char);
 
-char basedir[256];
+char basedir[PATH_MAX];
 int stop = 0;
 int use_dir_index = 0;
 
@@ -196,6 +198,7 @@ main (int argc, char *argv[])
     {
       close (bd);
     }
+
   /* signal handler */
   signal (SIGINT, (void *) sig_int);
   signal (SIGPIPE, SIG_IGN);
@@ -319,7 +322,7 @@ service_client (void *client_sockfd_ptr)
     }
 
   /* get current time */
-  char timestamp[30];
+  char timestamp[32];
   time_t now = time (NULL);
   strftime (timestamp, sizeof timestamp, "%a %d %b %Y %T %Z",
             localtime (&now));
@@ -338,8 +341,8 @@ service_client (void *client_sockfd_ptr)
   char *URL = (char *) strtok (NULL, " ");
   char *version = (char *) strtok (NULL, "\r\n");
 
-  char header[256];
-  char file[256];
+  char header[HEADER_MAX];
+  char file[PATH_MAX];
   ssize_t xfer_size = 0;
 
   if (strncmp (method, "GET", 3) == 0)
@@ -362,7 +365,7 @@ service_client (void *client_sockfd_ptr)
 
       unescape (URL);
       snprintf (file, (sizeof file) - 1, "%s/%s", basedir, URL);
-      file[255] = '\0';
+      file[PATH_MAX - 1] = '\0';
       int fd = open (file, O_RDONLY);
       if (fd == -1)
         {
@@ -555,8 +558,8 @@ static char *
 get_index_page (char *orig_URL)
 {
   struct dirent **dir_entry;
-  char path[256];
-  char URL[256];
+  char path[PATH_MAX];
+  char URL[URL_MAX];
   int n;
 
   if (URL == NULL)
@@ -597,7 +600,7 @@ get_index_page (char *orig_URL)
 
           for (i = 0; i < n; i++)
             {
-              char filename[512];
+              char filename[PATH_MAX];
               struct stat file_stat;
 
               snprintf (filename, (sizeof filename) - 1, "%s/%s", path,
