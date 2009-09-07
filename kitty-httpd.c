@@ -300,7 +300,7 @@ main (int argc, char *argv[])
 
   struct passwd *pwd = getpwuid (geteuid ());
   syslog (LOG_INFO,
-          "user %u starts kitty-httpd at port %u, document root = %s.",
+          "user %s starts kitty-httpd at port %u, document root = %s.",
           pwd -> pw_name, server_port, basedir);
 
   /* main loop - accept a connection, thread out service function */
