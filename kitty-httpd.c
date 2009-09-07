@@ -176,7 +176,7 @@ main (int argc, char *argv[])
           use_dir_index = 1;
           break;
         case 'p':
-          server_port = atoi (optarg);
+          server_port = atoi (optarg) % 65536;
           break;
         case 'r':
           use_so_reuseaddr = 1;
