@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Add option -u for setting effective user
   - Move all console messages to syslog facility 
     - kitty-httpd uses LOG_LOCAL0
   - Add IPv6 support
@@ -79,7 +80,6 @@ Known Issues
 To Do
 -----
   - Use chroot option
-  - Set uid/gid option
   - Default favicon.ico
   - Foreground & background mode
   - Secure programming
@@ -119,6 +119,7 @@ Not-so-near-future To Do
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <syslog.h>
+#include <pwd.h>
 
 #define BACKLOG 16
 #define BUFFER_SIZE 1024
@@ -147,11 +148,15 @@ main (int argc, char *argv[])
   unsigned short server_port = 8080;
   int use_ipv6_only = 0;
   int use_so_reuseaddr = 0;
+  int use_euid = 0;
   int opt;
+  char username[32];
+
   strncpy (basedir, ".", 1);
+  memset (username, sizeof username, '\0');
 
   /* parse argument */
-  while ((opt = getopt (argc, argv, "6d:hip:rv")) != -1)
+  while ((opt = getopt (argc, argv, "6d:hip:ru:v")) != -1)
     {
       switch (opt)
         {
@@ -176,6 +181,11 @@ main (int argc, char *argv[])
         case 'r':
           use_so_reuseaddr = 1;
           break;
+        case 'u':
+          use_euid = 1;
+          strncpy (username, optarg, (sizeof username) - 1);
+          username[(sizeof username) - 1] = '\0';
+          break;
         case 'v':
           printf ("%s %s\n", argv[0], VERSION);
           exit (EXIT_SUCCESS);
@@ -189,11 +199,43 @@ main (int argc, char *argv[])
            LOG_CONS | LOG_NDELAY | LOG_NOWAIT | LOG_PERROR | LOG_PID,
            LOG_LOCAL0);
 
+  /* seteuid if needed */
+  if (use_euid) 
+    {
+      struct passwd *pwd = getpwnam (username);
+      if (pwd == NULL) 
+        {
+          endpwent ();
+          switch (errno) 
+            {
+            case (0):
+            case (ENOENT):
+            case (ESRCH):
+            case (EBADF):
+            case (EPERM):
+              syslog (LOG_ERR, "error user %s not found", username);
+              break;
+            default:
+              syslog (LOG_ERR, "error %m");
+            }
+          exit (EXIT_FAILURE);
+        }
+
+      if (seteuid (pwd -> pw_uid) == -1)
+        {
+          endpwent ();
+          syslog (LOG_ERR, "error seteuid %m");
+          exit (EXIT_FAILURE);
+        }
+
+      endpwent ();
+    }
+
   /* test basedir */
   char cwd[PATH_MAX];
   if (getcwd (cwd, PATH_MAX) == NULL)
     {
-      syslog (LOG_ERR, "error %m");
+      syslog (LOG_ERR, "error getcwd %m");
       exit (EXIT_FAILURE);
     }
 
@@ -205,7 +247,7 @@ main (int argc, char *argv[])
 
   if (getcwd (basedir, PATH_MAX) == NULL)
     {
-      syslog (LOG_ERR, "error %m");
+      syslog (LOG_ERR, "error getcwd %m");
       exit (EXIT_FAILURE);
     }
 
@@ -256,9 +298,10 @@ main (int argc, char *argv[])
       exit (EXIT_FAILURE);
     }
 
+  struct passwd *pwd = getpwuid (geteuid ());
   syslog (LOG_INFO,
-          "server successfully started at port %u, base directory = %s.",
-          server_port, basedir);
+          "user %s successfully started kitty-httpd at port %u, base directory = %s.",
+          pwd -> pw_name, server_port, basedir);
 
   /* main loop - accept a connection, thread out service function */
   while (!stop)
