@@ -169,7 +169,7 @@ main (int argc, char *argv[])
           break;
         case 'h':
           printf
-            ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-v]\n",
+            ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-u user] [-v]\n",
              argv[0]);
           exit (EXIT_SUCCESS);
         case 'i':
@@ -300,7 +300,7 @@ main (int argc, char *argv[])
 
   struct passwd *pwd = getpwuid (geteuid ());
   syslog (LOG_INFO,
-          "user %s successfully started kitty-httpd at port %u, base directory = %s.",
+          "user %u starts kitty-httpd at port %u, document root = %s.",
           pwd -> pw_name, server_port, basedir);
 
   /* main loop - accept a connection, thread out service function */
