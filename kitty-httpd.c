@@ -108,6 +108,7 @@ Not-so-near-future To Do
 #include <errno.h>
 #include <signal.h>
 #include <limits.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -156,7 +157,20 @@ main (int argc, char *argv[])
   memset (username, sizeof username, '\0');
 
   /* parse argument */
-  while ((opt = getopt (argc, argv, "6d:hip:ru:v")) != -1)
+  static const struct option longopts[] = 
+    {
+      {"v6only",  0, NULL, '6'},
+      {"docroot", 1, NULL, 'd'},
+      {"help",    0, NULL, 'h'},
+      {"index",   0, NULL, 'i'},
+      {"port",    1, NULL, 'p'},
+      {"reuse",   0, NULL, 'r'},
+      {"user",    1, NULL, 'u'},
+      {"version", 0, NULL, 'v'},
+      {0, 0, 0, 0}
+    };
+
+  while ((opt = getopt_long (argc, argv, "6d:hip:ru:v", longopts, 0)) != -1)
     {
       switch (opt)
         {
