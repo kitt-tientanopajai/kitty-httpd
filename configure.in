@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT(kitty-httpd, 0.0.5b, kitty at kitty.in.th)
+AC_INIT(kitty-httpd, 0.0.5rc0, kitty at kitty.in.th)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([kitty-httpd.c])
 AC_CONFIG_HEADER([config.h])
@@ -16,7 +16,7 @@ AC_CHECK_LIB(pthread, pthread_create)
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
-AC_CHECK_HEADERS([unistd.h stdlib.h string.h fcntl.h limits.h pthread.h inttypes.h arpa/inet.h netinet/in.h sys/socket.h sys/sendfile.h netdb.h syslog.h])
+AC_CHECK_HEADERS([unistd.h stdlib.h string.h fcntl.h limits.h pthread.h inttypes.h arpa/inet.h netinet/in.h sys/socket.h sys/sendfile.h netdb.h syslog.h pwd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -30,7 +30,7 @@ AC_TYPE_UINT64_T
 AC_FUNC_MALLOC
 AC_FUNC_STAT
 AC_FUNC_STRFTIME
-AC_CHECK_FUNCS([socket sendfile getpeername getnameinfo strcasecmp strrchr syslog])
+AC_CHECK_FUNCS([socket sendfile getpeername getnameinfo strcasecmp strrchr syslog getpwnam])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

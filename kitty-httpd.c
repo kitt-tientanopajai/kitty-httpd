@@ -1,8 +1,8 @@
 /* 
 kitty-httpd.c 
-A small-footprint, low-feature web server.
+A small-footprint, almost-no-extra-features web server.
 
-v. 0.0.5b
+v. 0.0.5rc0
 Copyright (C) 2008-2009 Kitt Tientanopajai
 
 This program is free software: you can redistribute it and/or modify
@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Help message
   - Use GPL-compatible code to unescape
     - Use W3C instead of MPL.
   - Add option -u for setting effective user
@@ -81,7 +82,7 @@ Known Issues
 
 To Do
 -----
-  - Help page / manpage
+  - Manpage
   - Use chroot option
   - Default favicon.ico
   - Foreground & background mode
@@ -130,8 +131,8 @@ Not-so-near-future To Do
 #define CHUNK_SIZE 1073741824
 #define HEADER_MAX 256
 #define URL_MAX 256
-#define VERSION "0.0.5b"
-#define SERVER_VERSION "Kitty-HTTPD/0.0.5b"
+#define VERSION "0.0.5rc0"
+#define SERVER_VERSION "Kitty-HTTPD/0.0.5rc0"
 
 static void *sig_int (int);
 static void *service_client (void *);
@@ -139,6 +140,7 @@ static char *get_index_page (char *);
 static char *get_mime_type (char *);
 static void unescape (char *);
 static inline unsigned char hex (char);
+static void help (char *);
 
 char basedir[PATH_MAX];
 int stop = 0;
@@ -162,14 +164,15 @@ main (int argc, char *argv[])
   /* parse argument */
   static const struct option longopts[] = 
     {
-      {"v6only",  0, NULL, '6'},
-      {"docroot", 1, NULL, 'd'},
-      {"help",    0, NULL, 'h'},
-      {"index",   0, NULL, 'i'},
-      {"port",    1, NULL, 'p'},
-      {"reuse",   0, NULL, 'r'},
-      {"user",    1, NULL, 'u'},
-      {"version", 0, NULL, 'v'},
+      {"v6only",    0, NULL, '6'},
+      {"docroot",   1, NULL, 'd'},
+      {"path",      1, NULL, 'd'},
+      {"help",      0, NULL, 'h'},
+      {"index",     0, NULL, 'i'},
+      {"port",      1, NULL, 'p'},
+      {"reuseaddr", 0, NULL, 'r'},
+      {"user",      1, NULL, 'u'},
+      {"version",   0, NULL, 'v'},
       {0, 0, 0, 0}
     };
 
@@ -185,9 +188,7 @@ main (int argc, char *argv[])
           basedir[(sizeof basedir) - 1] = '\0';
           break;
         case 'h':
-          printf
-            ("Usage: %s [-6] [-d directory] [-h] [-i] [-p port] [-r] [-u user] [-v]\n",
-             argv[0]);
+          help (argv[0]);
           exit (EXIT_SUCCESS);
         case 'i':
           use_dir_index = 1;
@@ -916,4 +917,23 @@ hex (char c)
   return c >= '0' && c <= '9' ? c - '0' 
          : c >= 'A' && c <= 'F' ? c - 'A' + 10 
          : c - 'a' + 10;
+}
+
+static void
+help (char *progname)
+{
+  printf ("Usage %-.32s [OPTION...]\n", progname);
+  printf ("A small-footprint, almost-no-extra-features web server.\n");
+  printf ("\n");
+  printf ("  -6, --v6only                    use IPv6 only\n");
+  printf ("  -d, --docroot=, --path=path     set document root to path \n");
+  printf ("  -i, --index                     use automatic indexing\n");
+  printf ("  -p, --port=num                  listen on port (default 8080)\n");
+  printf ("  -r, --reuseaddr                 attempt to set SO_REUSEADDR\n");
+  printf ("  -u, --user=username             set uid to user\n");
+  printf ("  -v, --version                   show version\n");
+  printf ("  -h, --help                      print this help\n");
+  printf ("\n");
+  printf ("Report bugs to kitty@kitty.in.th\n");
+  printf ("\n");
 }
