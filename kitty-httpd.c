@@ -20,6 +20,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Use GPL-compatible code to unescape
+    - Use W3C instead of MPL.
   - Add option -u for setting effective user
   - Move all console messages to syslog facility 
     - kitty-httpd uses LOG_LOCAL0
@@ -79,6 +81,7 @@ Known Issues
 
 To Do
 -----
+  - Help page / manpage
   - Use chroot option
   - Default favicon.ico
   - Foreground & background mode
@@ -134,8 +137,8 @@ static void *sig_int (int);
 static void *service_client (void *);
 static char *get_index_page (char *);
 static char *get_mime_type (char *);
-void unescape (char *);
-static int hex (char);
+static void unescape (char *);
+static inline unsigned char hex (char);
 
 char basedir[PATH_MAX];
 int stop = 0;
@@ -882,31 +885,35 @@ get_mime_type (char *fname)
 }
 
 /* unescape string
- * based on MPL-licensed code in koders.com */
-void
-unescape (char *s)
+ * based on HTUnEscape () in HTEscape.c of libwww 
+ * under W3C license */
+static void
+unescape (char *str)
 {
-  char *p;
+  char *p = str;
 
-  for (p = s; *s != '\0'; s++)
+  while (*str) 
     {
-      if (*s == '%')
+      if (*str == '%')
         {
-          if (*++s != '\0')
-            *p = hex (*s) << 4;
-          if (*++s != '\0')
-            *p++ += hex (*s);
+          if (*++str)
+            *p = hex (*str) * 16;
+          if (*++str)
+            *p++ += hex (*str);
         }
       else
-        *p++ = *s;
+        *p++ = *str;
+
+      str++;
     }
-  *p = '\0';
+  *p = 0;
 }
 
 /* convert single hex character to integer */
-static int
+static inline unsigned char
 hex (char c)
 {
-  return (c >= '0' && c <= '9' ? c - '0' : c >= 'A'
-          && c <= 'F' ? c - 'A' + 10 : c - 'a' + 10);
+  return c >= '0' && c <= '9' ? c - '0' 
+         : c >= 'A' && c <= 'F' ? c - 'A' + 10 
+         : c - 'a' + 10;
 }
