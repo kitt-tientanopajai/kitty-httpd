@@ -1,40 +1,59 @@
 ChangeLogs
 
+* Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
+  - Add manpage and more help messages
+  - Use GPL-compatible code to unescape
+    - Use W3C instead of MPL.
+  - Add option -u for setting effective user
+  - Move all console messages to syslog facility 
+    - kitty-httpd uses LOG_LOCAL0
+  - Add IPv6 support
+  - Add option -i for directory index
+  - Add option -v for version
+  - Cleanup indent & re-tab
+  - Bugs fixed
+    - The recv loop does not read properly
+    - Free client_sockfd (too many open files)
+    - Client termination may cause broken pipe (SIGPIPE)
+      - Ref: Neutron Soutmun
+    - Properly close client socket if a thread cannot be created.
+    - GET / does not log URL properly when use_directory_index = 1
+
 
 * Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
-	- Add SO_REUSEADDR
-	- Rewrite sendfile loop
-	- Capable to transfer file size >= 2 GB
-	- GNU Coding Style
-	- Honour index.html if exists
-	- Capable to handle escaped URLs
-	- Add HTML code for errors.
-	- Bugs fixed
-		- Properly stop the server when receiving SIGINT (Ctrl+C)
-		- Long-waiting 'cancel download' handle
-		- Threads do not exit properly causing high memory consumption
-		- Memory leaks in threads
-		- File size should be long long unsigned.
-		- Content length should be long long unsigned.
+  - Add SO_REUSEADDR
+  - Rewrite sendfile loop
+  - Capable to transfer file size >= 2 GB
+  - GNU Coding Style
+  - Honour index.html if exists
+  - Capable to handle escaped URLs
+  - Add HTML code for errors.
+  - Bugs fixed
+    - Properly stop the server when receiving SIGINT (Ctrl+C)
+    - Long-waiting 'cancel download' handle
+    - Threads do not exit properly causing high memory consumption
+    - Memory leaks in threads
+    - File size should be long long unsigned.
+    - Content length should be long long unsigned.
 
 0.0.3 Mon, 06 Oct 2008 01:00:46 +0700
-	- Use current directory as default base directory.
-	- Add option -p port.
-	- Add option -d base directory.
-	- Implement directory index.
-	- Add more MIME type (i.e., OpenOffice).
-	- Bugs fixed 
-		- Send HTTP version according to the request.
-		- Correct some MIME Types.
+  - Use current directory as default base directory.
+  - Add option -p port.
+  - Add option -d base directory.
+  - Implement directory index.
+  - Add more MIME type (i.e., OpenOffice).
+  - Bugs fixed 
+    - Send HTTP version according to the request.
+    - Correct some MIME Types.
 
 0.0.2 Tue, 30 Sep 2008 20:04:02 +0700
-	- Implement all HTTP/1.1 requirement (GET, HEAD).
-	- Response based on version requested.
-	- NPTL-based Multithreading.
-	- MIME supported based on file extension.
-	- Bugs fixed.
+  - Implement all HTTP/1.1 requirement (GET, HEAD).
+  - Response based on version requested.
+  - NPTL-based Multithreading.
+  - MIME supported based on file extension.
+  - Bugs fixed.
 
 0.0.1 Sat, 27 Sep 2008 23:06:18 +0700
-	- Initial version.
-	- Implement GET method only.
-	- HTTP/0.9.
+  - Initial version.
+  - Implement GET method only.
+  - HTTP/0.9.
