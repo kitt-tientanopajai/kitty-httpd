@@ -159,7 +159,7 @@ main (int argc, char *argv[])
   char username[32];
 
   strncpy (basedir, ".", 1);
-  memset (username, sizeof username, '\0');
+  memset (username, '\0', sizeof username);
 
   /* parse argument */
   static const struct option longopts[] = 
