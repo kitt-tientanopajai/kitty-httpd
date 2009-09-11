@@ -1,0 +1,50 @@
+.TH KITTY\-HTTPD 1 "September 2009" "Kitty HTTPD" "User Manual"
+.SH NAME
+Kitty HTTPD \- a lightweight web server
+.SH SYNOPSIS
+.B kitty\-httpd 
+[\fIOPTION\fR] ...
+.SH DESCRIPTION
+Kitty HTTPD is a fast, safe, and lightweight web server. It is written 
+to share files through HTTP service without installing a heavyweight\-
+full\-feature HTTP server. By default, kitty\-httpd binds to any 
+network interface (both IPv4 and IPv6), and serves the current directory
+through port 8080. With \-i option, index page will automatically be 
+generated. Users may use any web browser to visit the web page, or 
+download files from the server.  All activities of the server are logged
+to a syslog facility.
+.PP
+kitty\-httpd is examined by 
+.I flawfinder 
+and
+.I valgrind.
+.SH OPTIONS
+.IP \fB\-6\fR,\ \fB\-\-v6only\fR
+Use IPv6 only. 
+.IP \fB\-d\fR,\ \fB\-\-docroot=\fR,\ \fB\-\-path\fR=\fIPATH\fR
+Set document root to PATH
+.IP  \fB\-i\fR,\ \fB\-\-index\fR
+Automatic index if index.html does not exist
+.IP \fB\-p\fR,\ \fB\-\-port\fR=\fINUM\fR
+Listen on port NUM (default 8080)
+.IP \fB\-r\fR,\ \fB\-\-reuseaddr\fR
+Attempt to set SO_REUSEADDR
+.IP \fB\-u\fR,\ \fB\-\-user\fR=\fIUSERNAME\fR
+Use user USERNAME to run the server
+.IP \fB\-v\fR,\ \fB\-\-version\fR
+Print version
+.IP \fB\-h\fR,\ \fB\-\-help\fR
+Print help page
+.SH BUGS
+May exist. 
+.SH AUTHOR
+Kitty HTTPD is written by Kitt Tientanopajai
+.SH "REPORTING BUGS"
+Report bugs to <kitty@kitty.in.th>
+Kitty HTTPD home page: <http://kitty.in.th/index.php?page=kitty-httpd>
+.SH COPYRIGHT
+Copyright \(co 2009 Kitt Tientanopajai.
+License: GNU GPL version 2 or later.
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.

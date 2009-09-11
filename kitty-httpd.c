@@ -82,12 +82,7 @@ Known Issues
 
 To Do
 -----
-  - Manpage
-  - Use chroot option
-  - Default favicon.ico
-  - Foreground & background mode
   - Secure programming
-  - Code optimization
   - Network optimization
   - Beautify the index page + CSS
 
