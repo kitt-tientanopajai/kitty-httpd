@@ -1,8 +1,8 @@
 /* 
 kitty-httpd.c 
-A small-footprint, almost-no-extra-features web server.
+A lightweight web server
 
-v. 0.0.5rc0
+v. 0.0.5
 Copyright (C) 2008-2009 Kitt Tientanopajai
 
 This program is free software: you can redistribute it and/or modify
@@ -19,8 +19,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 ChangeLogs
 ----------
-
-  - Help message
+* Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
+  - Add manpage and more help messages
   - Use GPL-compatible code to unescape
     - Use W3C instead of MPL.
   - Add option -u for setting effective user
@@ -126,8 +126,8 @@ Not-so-near-future To Do
 #define CHUNK_SIZE 1073741824
 #define HEADER_MAX 256
 #define URL_MAX 256
-#define VERSION "0.0.5rc0"
-#define SERVER_VERSION "Kitty-HTTPD/0.0.5rc0"
+#define VERSION "0.0.5"
+#define SERVER_VERSION "Kitty-HTTPD/0.0.5"
 
 static void *sig_int (int);
 static void *service_client (void *);
@@ -918,14 +918,14 @@ static void
 help (char *progname)
 {
   printf ("Usage %-.32s [OPTION...]\n", progname);
-  printf ("A small-footprint, almost-no-extra-features web server.\n");
+  printf ("A lightweight web server.\n");
   printf ("\n");
   printf ("  -6, --v6only                    use IPv6 only\n");
-  printf ("  -d, --docroot=, --path=path     set document root to path \n");
+  printf ("  -d, --docroot=, --path=PATH     set document root to PATH \n");
   printf ("  -i, --index                     use automatic indexing\n");
-  printf ("  -p, --port=num                  listen on port (default 8080)\n");
+  printf ("  -p, --port=NUM                  listen on port NUM (default 8080)\n");
   printf ("  -r, --reuseaddr                 attempt to set SO_REUSEADDR\n");
-  printf ("  -u, --user=username             set uid to user\n");
+  printf ("  -u, --user=USERNAME             use user USERNAME to run the server\n");
   printf ("  -v, --version                   show version\n");
   printf ("  -h, --help                      print this help\n");
   printf ("\n");
