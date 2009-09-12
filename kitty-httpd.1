@@ -5,16 +5,16 @@ Kitty HTTPD \- a lightweight web server
 .B kitty\-httpd 
 [\fIOPTION\fR] ...
 .SH DESCRIPTION
-Kitty HTTPD is a fast, safe, and lightweight web server. It is written 
+Kitty HTTPD is a fast, safe, and lightweight web server. It aims
 to share files through HTTP service without installing a heavyweight\-
 full\-feature HTTP server. By default, kitty\-httpd binds to any 
 network interface (both IPv4 and IPv6), and serves the current directory
 through port 8080. With \-i option, index page will automatically be 
 generated. Users may use any web browser to visit the web page, or 
-download files from the server.  All activities of the server are logged
-to a syslog facility.
+download files. All activities of the server are logged to a syslog 
+facility.
 .PP
-kitty\-httpd is examined by 
+kitty\-httpd has been examined by 
 .I flawfinder 
 and
 .I valgrind.
