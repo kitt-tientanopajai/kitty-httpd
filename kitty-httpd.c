@@ -19,6 +19,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 ChangeLogs
 ----------
+
+  - syslog is now optional
+    - Use -l to enable
 * Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
   - Add manpage and more help messages
   - Use GPL-compatible code to unescape
@@ -140,6 +143,7 @@ static void help (char *);
 char basedir[PATH_MAX];
 int stop = 0;
 int use_dir_index = 0;
+int use_syslog = 0;
 
 int
 main (int argc, char *argv[])
@@ -164,6 +168,7 @@ main (int argc, char *argv[])
       {"path",      1, NULL, 'd'},
       {"help",      0, NULL, 'h'},
       {"index",     0, NULL, 'i'},
+      {"log",       0, NULL, 'l'},
       {"port",      1, NULL, 'p'},
       {"reuseaddr", 0, NULL, 'r'},
       {"user",      1, NULL, 'u'},
@@ -171,7 +176,7 @@ main (int argc, char *argv[])
       {0, 0, 0, 0}
     };
 
-  while ((opt = getopt_long (argc, argv, "6d:hip:ru:v", longopts, 0)) != -1)
+  while ((opt = getopt_long (argc, argv, "6d:hilp:ru:v", longopts, 0)) != -1)
     {
       switch (opt)
         {
@@ -187,6 +192,9 @@ main (int argc, char *argv[])
           exit (EXIT_SUCCESS);
         case 'i':
           use_dir_index = 1;
+          break;
+        case 'l':
+          use_syslog = 1;
           break;
         case 'p':
           server_port = atoi (optarg) % 65536;
@@ -208,9 +216,10 @@ main (int argc, char *argv[])
     }
 
   /* start log facility */
-  openlog ("kitty-http",
-           LOG_CONS | LOG_NDELAY | LOG_NOWAIT | LOG_PERROR | LOG_PID,
-           LOG_LOCAL0);
+  if (use_syslog)
+    openlog ("kitty-http",
+             LOG_CONS | LOG_NDELAY | LOG_NOWAIT | LOG_PERROR | LOG_PID,
+             LOG_LOCAL0);
 
   /* seteuid if needed */
   if (use_euid) 
@@ -226,10 +235,12 @@ main (int argc, char *argv[])
             case (ESRCH):
             case (EBADF):
             case (EPERM):
-              syslog (LOG_ERR, "error user %s not found", username);
+              if (use_syslog)
+                syslog (LOG_ERR, "error user %s not found", username);
               break;
             default:
-              syslog (LOG_ERR, "error %m");
+              if (use_syslog)
+                syslog (LOG_ERR, "error %m");
             }
           exit (EXIT_FAILURE);
         }
@@ -237,7 +248,10 @@ main (int argc, char *argv[])
       if (seteuid (pwd -> pw_uid) == -1)
         {
           endpwent ();
-          syslog (LOG_ERR, "error seteuid %m");
+
+          if (use_syslog)
+            syslog (LOG_ERR, "error seteuid %m");
+
           exit (EXIT_FAILURE);
         }
 
@@ -248,19 +262,25 @@ main (int argc, char *argv[])
   char cwd[PATH_MAX];
   if (getcwd (cwd, PATH_MAX) == NULL)
     {
-      syslog (LOG_ERR, "error getcwd %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error getcwd %m");
+
       exit (EXIT_FAILURE);
     }
 
   if (chdir (basedir) == -1)
     {
-      syslog (LOG_ERR, "error cannot change working directory %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error cannot change working directory %m");
+
       exit (EXIT_FAILURE);
     }
 
   if (getcwd (basedir, PATH_MAX) == NULL)
     {
-      syslog (LOG_ERR, "error getcwd %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error getcwd %m");
+
       exit (EXIT_FAILURE);
     }
 
@@ -272,7 +292,9 @@ main (int argc, char *argv[])
   /* create socket */
   if ((server_sockfd = socket (PF_INET6, SOCK_STREAM, 0)) == -1)
     {
-      syslog (LOG_ERR, "error opening socket: %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error opening socket: %m");
+
       exit (EXIT_FAILURE);
     }
 
@@ -284,7 +306,8 @@ main (int argc, char *argv[])
       (server_sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &use_ipv6_only,
        sizeof use_ipv6_only) == -1)
     {
-      syslog (LOG_INFO, "cannot setting IPV6_V6ONLY: %m");
+      if (use_syslog)
+        syslog (LOG_INFO, "cannot setting IPV6_V6ONLY: %m");
     }
 
 
@@ -292,7 +315,8 @@ main (int argc, char *argv[])
       (server_sockfd, SOL_SOCKET, SO_REUSEADDR, &use_so_reuseaddr,
        sizeof use_so_reuseaddr) == -1)
     {
-      syslog (LOG_INFO, "cannot setting SO_REUSEADDR: %m");
+      if (use_syslog)
+        syslog (LOG_INFO, "cannot setting SO_REUSEADDR: %m");
     }
 
   /* bind port */
@@ -300,21 +324,30 @@ main (int argc, char *argv[])
        (server_sockfd, (const struct sockaddr *) &server_addr,
         sizeof (struct sockaddr_in6))) == -1)
     {
-      syslog (LOG_ERR, "error binding port: %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error binding port: %m");
+
       exit (EXIT_FAILURE);
     }
 
   /* listen */
   if (listen (server_sockfd, BACKLOG) == -1)
     {
-      syslog (LOG_ERR, "error listening for connections: %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error listening for connections: %m");
+
       exit (EXIT_FAILURE);
     }
 
   struct passwd *pwd = getpwuid (geteuid ());
-  syslog (LOG_INFO,
-          "user %s starts kitty-httpd at port %u, document root = %s.",
-          pwd -> pw_name, server_port, basedir);
+
+  if (use_syslog)
+    syslog (LOG_INFO,
+            "user %s starts kitty-httpd at port %u, document root = %s.",
+            pwd -> pw_name, server_port, basedir);
+  else
+    printf ("user %s starts kitty-httpd at port %u, document root = %s.\n",
+            pwd -> pw_name, server_port, basedir);
 
   /* main loop - accept a connection, thread out service function */
   while (!stop)
@@ -332,7 +365,9 @@ main (int argc, char *argv[])
           if (pthread_create
               (&tid, NULL, service_client, (void *) client_sockfd))
             {
-              syslog (LOG_INFO, "error creating service thread: %m");
+              if (use_syslog)
+                syslog (LOG_INFO, "error creating service thread: %m");
+
               shutdown ((int) client_sockfd, SHUT_RDWR);
               close ((int) client_sockfd);
             }
@@ -346,10 +381,15 @@ main (int argc, char *argv[])
   shutdown ((int) server_sockfd, SHUT_RDWR);
   close ((int) server_sockfd);
   printf ("\n");
-  syslog (LOG_INFO, "SIGINT received, server shutdown.");
-  closelog ();
+  if (use_syslog)
+    {
+      syslog (LOG_INFO, "SIGINT received, server shutdown.");
+      closelog ();
+    }
+  else
+    printf ("SIGINT received, server shutdown.\n");
 
-  if (chdir (cwd) == -1)
+  if (chdir (cwd) == -1 && use_syslog)
     syslog (LOG_INFO, "error %m");
 
   return 0;
@@ -380,13 +420,17 @@ service_client (void *client_sockfd_ptr)
 
   if (recv_len == 0)
     {
-      syslog (LOG_ERR, "client closed connection");
+      if (use_syslog)
+        syslog (LOG_ERR, "client closed connection");
+
       close ((int) client_sockfd);
       pthread_exit (NULL);
     }
   else if (recv_len == -1)
     {
-      syslog (LOG_ERR, "error receiving data: %m");
+      if (use_syslog)
+        syslog (LOG_ERR, "error receiving data: %m");
+
       shutdown ((int) client_sockfd, SHUT_RDWR);
       close ((int) client_sockfd);
       pthread_exit (NULL);
@@ -424,14 +468,16 @@ service_client (void *client_sockfd_ptr)
           ((int) client_sockfd, IPPROTO_TCP, TCP_NODELAY, &optval,
            sizeof optval) == -1)
         {
-          syslog (LOG_INFO, "error setting TCP_NODELAY: %m");
+          if (use_syslog)
+            syslog (LOG_INFO, "error setting TCP_NODELAY: %m");
         }
 
       if (setsockopt
           ((int) client_sockfd, IPPROTO_TCP, TCP_CORK, &optval,
            sizeof optval) == -1)
         {
-          syslog (LOG_INFO, "error setting TCP_CORK: %m");
+          if (use_syslog)
+            syslog (LOG_INFO, "error setting TCP_CORK: %m");
         }
 
       unescape (URL);
@@ -449,8 +495,9 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              syslog (LOG_INFO, "%s %s %s %s 403 Forbidden %d", peer,
-                      method, URL, version, xfer_size);
+              if (use_syslog)
+                syslog (LOG_INFO, "%s %s %s %s 403 Forbidden %d", peer,
+                        method, URL, version, xfer_size);
               break;
             case ENOENT:        /* 404 Not Found */
               snprintf (header, (sizeof header - 1),
@@ -459,8 +506,9 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d", peer,
-                      method, URL, version, xfer_size);
+              if (use_syslog)
+                syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d", peer,
+                        method, URL, version, xfer_size);
               break;
             default:            /* 400 Bad Request */
               snprintf (header, (sizeof header - 1),
@@ -469,8 +517,9 @@ service_client (void *client_sockfd_ptr)
               header[(sizeof header) - 1] = '\0';
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
-              syslog (LOG_INFO, "%s %s %s %s 400 Bad Request %d", peer,
-                      method, URL, version, xfer_size);
+              if (use_syslog)
+                syslog (LOG_INFO, "%s %s %s %s 400 Bad Request %d", peer,
+                        method, URL, version, xfer_size);
             }
         }
       else
@@ -495,7 +544,9 @@ service_client (void *client_sockfd_ptr)
                     sendfile ((int) client_sockfd, fd, &offset, CHUNK_SIZE);
                   if (xfer_size == -1)
                     {
-                      syslog (LOG_INFO, "Error transfer data: %m");
+                      if (use_syslog)
+                        syslog (LOG_INFO, "Error transfer data: %m");
+
                       break;
                     }
                   else if ((xfer_size != CHUNK_SIZE)
@@ -512,8 +563,9 @@ service_client (void *client_sockfd_ptr)
                 }
               while (total_xfer < file_stat.st_size);
 
-              syslog (LOG_INFO, "%s %s %s %s 200 OK %llu", peer,
-                      method, URL, version, total_xfer);
+              if (use_syslog)
+                syslog (LOG_INFO, "%s %s %s %s 200 OK %llu", peer,
+                        method, URL, version, total_xfer);
             }
           else if (S_ISDIR (file_stat.st_mode))
             {
@@ -536,9 +588,10 @@ service_client (void *client_sockfd_ptr)
                           xfer_size =
                             send ((int) client_sockfd, header,
                                   strlen (header), 0);
-                          syslog (LOG_INFO,
-                                  "%s %s %s %s 503 Service Unavailable %d",
-                                  peer, method, URL, version, xfer_size);
+                          if (use_syslog)
+                            syslog (LOG_INFO,
+                                    "%s %s %s %s 503 Service Unavailable %d",
+                                    peer, method, URL, version, xfer_size);
                         }
                       else
                         {
@@ -553,8 +606,9 @@ service_client (void *client_sockfd_ptr)
                             send ((int) client_sockfd, index_page,
                                   strlen (index_page), 0);
 
-                          syslog (LOG_INFO, "%s %s %s %s 200 OK %d",
-                                  peer, method, URL, version, xfer_size);
+                          if (use_syslog)
+                            syslog (LOG_INFO, "%s %s %s %s 200 OK %d",
+                                    peer, method, URL, version, xfer_size);
 
                           free (index_page);
                         }
@@ -568,8 +622,9 @@ service_client (void *client_sockfd_ptr)
                       xfer_size =
                         send ((int) client_sockfd, header, strlen (header),
                               0);
-                      syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d",
-                              peer, method, URL, version, xfer_size);
+                      if (use_syslog)
+                        syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d",
+                                peer, method, URL, version, xfer_size);
                     }
                 }
               else
@@ -586,8 +641,9 @@ service_client (void *client_sockfd_ptr)
                   xfer_size =
                     sendfile ((int) client_sockfd, index_fd, &offset,
                               index_file_stat.st_size);
-                  syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer,
-                          method, URL, version, xfer_size);
+                  if (use_syslog)
+                    syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer,
+                            method, URL, version, xfer_size);
                   close (index_fd);
                 }
             }
@@ -601,8 +657,9 @@ service_client (void *client_sockfd_ptr)
                 SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
-      syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer, method, URL,
-              version, xfer_size);
+      if (use_syslog)
+        syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer, method, URL,
+                version, xfer_size);
     }
   else
     {
@@ -612,8 +669,9 @@ service_client (void *client_sockfd_ptr)
                 version, timestamp, SERVER_VERSION, SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
-      syslog (LOG_INFO, "%s %s %s %s 501 Not Implemented %d", peer,
-              method, URL, version, xfer_size);
+      if (use_syslog)
+        syslog (LOG_INFO, "%s %s %s %s 501 Not Implemented %d", peer,
+                method, URL, version, xfer_size);
     }
 
   shutdown ((int) client_sockfd, SHUT_RDWR);
@@ -647,7 +705,9 @@ get_index_page (char *orig_URL)
   path[(sizeof path) - 1] = '\0';
   if ((n = scandir (path, &dir_entry, 0, alphasort)) == -1)
     {
-      syslog (LOG_INFO, "error scanning directory: %m");
+      if (use_syslog)
+        syslog (LOG_INFO, "error scanning directory: %m");
+
       return NULL;
     }
   else
@@ -656,7 +716,9 @@ get_index_page (char *orig_URL)
 
       if (index_page == NULL)
         {
-          syslog (LOG_INFO, "error creating index page: %m");
+          if (use_syslog)
+            syslog (LOG_INFO, "error creating index page: %m");
+
           return NULL;
         }
       else
@@ -680,7 +742,9 @@ get_index_page (char *orig_URL)
               filename[(sizeof filename) - 1] = '\0';
               if (stat (filename, &file_stat) == -1)
                 {
-                  syslog (LOG_INFO, "error stat file: %m");
+                  if (use_syslog)
+                    syslog (LOG_INFO, "error stat file: %m");
+
                   return NULL;
                 }
               else
@@ -924,6 +988,7 @@ help (char *progname)
   printf ("  -d, --docroot=, --path=PATH     set document root to PATH \n");
   printf ("  -i, --index                     use automatic indexing\n");
   printf ("  -p, --port=NUM                  listen on port NUM (default 8080)\n");
+  printf ("  -l, --log                       log to syslog\n");
   printf ("  -r, --reuseaddr                 attempt to set SO_REUSEADDR\n");
   printf ("  -u, --user=USERNAME             use user USERNAME to run the server\n");
   printf ("  -v, --version                   show version\n");

@@ -11,7 +11,7 @@ full\-feature HTTP server. By default, kitty\-httpd binds to any
 network interface (both IPv4 and IPv6), and serves the current directory
 through port 8080. With \-i option, index page will automatically be 
 generated. Users may use any web browser to visit the web page, or 
-download files. All activities of the server are logged to a syslog 
+download files. All events of the server are logged to a syslog 
 facility.
 .PP
 kitty\-httpd has been examined by 
@@ -25,6 +25,8 @@ Use IPv6 only.
 Set document root to PATH
 .IP  \fB\-i\fR,\ \fB\-\-index\fR
 Automatic index if index.html does not exist
+.IP  \fB\-l\fR,\ \fB\-\-log\fR
+Log events to syslog 
 .IP \fB\-p\fR,\ \fB\-\-port\fR=\fINUM\fR
 Listen on port NUM (default 8080)
 .IP \fB\-r\fR,\ \fB\-\-reuseaddr\fR
