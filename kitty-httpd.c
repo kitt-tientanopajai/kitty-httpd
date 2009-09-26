@@ -20,6 +20,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Make use of thread-safe functions
+    - localtime_r(), strtok_r()
   - syslog is now optional
     - Use -l to enable
 * Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
@@ -452,9 +454,10 @@ service_client (void *client_sockfd_ptr)
                NULL, 0, NI_NUMERICHOST);
 
   /* process the request */
-  char *method = (char *) strtok (buffer, " ");
-  char *URL = (char *) strtok (NULL, " ");
-  char *version = (char *) strtok (NULL, "\r\n");
+  char *saveptr;
+  char *method = (char *) strtok_r (buffer, " ", &saveptr);
+  char *URL = (char *) strtok_r (NULL, " ", &saveptr);
+  char *version = (char *) strtok_r (NULL, "\r\n", &saveptr);
 
   char header[HEADER_MAX];
   char file[PATH_MAX];
@@ -755,8 +758,9 @@ get_index_page (char *orig_URL)
                     continue;
 
                   char last_modified[32];
+                  struct tm result;
                   strftime (last_modified, sizeof last_modified,
-                            "%F %T %Z", localtime (&file_stat.st_mtime));
+                            "%F %T %Z", localtime_r (&file_stat.st_mtime, &result));
                   if (S_ISREG (file_stat.st_mode))
                     {
                       int spaces = 40 - strlen (dir_entry[i]->d_name);
