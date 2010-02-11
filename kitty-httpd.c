@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Header should use CRLF for end-of-line.
   - Make use of thread-safe functions
     - localtime_r(), strtok_r()
   - syslog is now optional
@@ -493,7 +494,7 @@ service_client (void *client_sockfd_ptr)
             {
             case EACCES:        /* 403 Forbidden */
               snprintf (header, (sizeof header - 1),
-                        "%s 403 Forbidden\n\n<html><body><h1>403 Forbidden</h1><hr>%s</body></html>",
+                        "%s 403 Forbidden\r\n\r\n<html><body><h1>403 Forbidden</h1><hr>%s</body></html>",
                         version, SERVER_VERSION);
               header[(sizeof header) - 1] = '\0';
               xfer_size =
@@ -504,7 +505,7 @@ service_client (void *client_sockfd_ptr)
               break;
             case ENOENT:        /* 404 Not Found */
               snprintf (header, (sizeof header - 1),
-                        "%s 404 Not Found\n\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
+                        "%s 404 Not Found\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
                         version, SERVER_VERSION);
               header[(sizeof header) - 1] = '\0';
               xfer_size =
@@ -515,7 +516,7 @@ service_client (void *client_sockfd_ptr)
               break;
             default:            /* 400 Bad Request */
               snprintf (header, (sizeof header - 1),
-                        "%s 400 Bad Request\n\n<html><body><h1>400 Bad Request</h1><hr>%s</body></html>",
+                        "%s 400 Bad Request\r\n\r\n<html><body><h1>400 Bad Request</h1><hr>%s</body></html>",
                         version, SERVER_VERSION);
               header[(sizeof header) - 1] = '\0';
               xfer_size =
@@ -532,7 +533,7 @@ service_client (void *client_sockfd_ptr)
           if (S_ISREG (file_stat.st_mode))
             {
               snprintf (header, (sizeof header - 1),
-                        "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: %s\nContent-Length: %llu\n\n",
+                        "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %llu\r\n\r\n",
                         version, timestamp, SERVER_VERSION,
                         get_mime_type (URL), (uint64_t) file_stat.st_size);
               header[(sizeof header) - 1] = '\0';
@@ -585,7 +586,7 @@ service_client (void *client_sockfd_ptr)
                       if (index_page == NULL)
                         {
                           snprintf (header, (sizeof header) - 1,
-                                    "%s 503 Service Unavailable\n\n<html><body><h1>503 Service Unavailable</h1><hr>%s</body></html>",
+                                    "%s 503 Service Unavailable\r\n\r\n<html><body><h1>503 Service Unavailable</h1><hr>%s</body></html>",
                                     version, SERVER_VERSION);
                           header[(sizeof header) - 1] = '\0';
                           xfer_size =
@@ -599,7 +600,7 @@ service_client (void *client_sockfd_ptr)
                       else
                         {
                           snprintf (header, (sizeof header) - 1,
-                                    "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: %s\nContent-Length: %d\n\n",
+                                    "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
                                     version, timestamp, SERVER_VERSION,
                                     "text/html", strlen (index_page));
                           header[(sizeof header) - 1] = '\0';
@@ -619,7 +620,7 @@ service_client (void *client_sockfd_ptr)
                   else
                     {
                       snprintf (header, (sizeof header - 1),
-                                "%s 404 Not Found\n\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
+                                "%s 404 Not Found\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
                                 version, SERVER_VERSION);
                       header[(sizeof header) - 1] = '\0';
                       xfer_size =
@@ -635,7 +636,7 @@ service_client (void *client_sockfd_ptr)
                   struct stat index_file_stat;
                   fstat (index_fd, &index_file_stat);
                   snprintf (header, (sizeof header) - 1,
-                            "%s 200 OK\nDate: %s\nServer: %s\nContent-Type: text/html\nContent-Length: %llu\n\n",
+                            "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: text/html\r\nContent-Length: %llu\r\n\r\n",
                             version, timestamp, SERVER_VERSION,
                             (uint64_t) index_file_stat.st_size);
                   header[(sizeof header) - 1] = '\0';
@@ -656,7 +657,7 @@ service_client (void *client_sockfd_ptr)
   else if (strcmp (method, "HEAD") == 0)
     {
       snprintf (header, (sizeof header) - 1,
-                "%s 200 OK\nDate: %s\nServer: %s\n\n", version, timestamp,
+                "%s 200 OK\r\nDate: %s\r\nServer: %s\r\n\r\n", version, timestamp,
                 SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
@@ -668,7 +669,7 @@ service_client (void *client_sockfd_ptr)
     {
       /* 501 Not Implemented */
       snprintf (header, (sizeof header) - 1,
-                "%s 501 Not Implemented\nDate: %sServer: %s\n\n<html><body><h1>501 Not Implemented</h1><hr>%s</body></html>",
+                "%s 501 Not Implemented\r\nDate: %sServer: %s\r\n\r\n<html><body><h1>501 Not Implemented</h1><hr>%s</body></html>",
                 version, timestamp, SERVER_VERSION, SERVER_VERSION);
       header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
