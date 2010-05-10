@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Fix server does not read index.html in non-basedir.
   - Fix problem with broken symlinks.
   - Header should use CRLF for end-of-line.
   - Make use of thread-safe functions
@@ -575,7 +576,7 @@ service_client (void *client_sockfd_ptr)
           else if (S_ISDIR (file_stat.st_mode))
             {
               /* index.html exists ? */
-              snprintf (file, (sizeof file) - 1, "%s/index.html", basedir);
+              snprintf (file, (sizeof file) - 1, "%s/%s/index.html", basedir, URL);
               file[(sizeof file) - 1] = '\0';
               int index_fd = open (file, O_RDONLY);
               if (index_fd == -1)
