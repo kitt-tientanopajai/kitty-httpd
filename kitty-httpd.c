@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Fix problem with broken symlinks.
   - Header should use CRLF for end-of-line.
   - Make use of thread-safe functions
     - localtime_r(), strtok_r()
@@ -747,9 +748,7 @@ get_index_page (char *orig_URL)
               if (stat (filename, &file_stat) == -1)
                 {
                   if (use_syslog)
-                    syslog (LOG_INFO, "error stat file: %m");
-
-                  return NULL;
+                    syslog (LOG_INFO, "error stat file %s: %m", filename);
                 }
               else
                 {
