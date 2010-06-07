@@ -2,8 +2,8 @@
 kitty-httpd.c 
 A lightweight web server
 
-v. 0.0.5
-Copyright (C) 2008-2009 Kitt Tientanopajai
+v. 0.5.0
+Copyright (C) 2008-2010 Kitt Tientanopajai
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 as 
@@ -20,13 +20,18 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
-  - Fix server does not read index.html in non-basedir.
-  - Fix problem with broken symlinks.
-  - Header should use CRLF for end-of-line.
+* Mon, 07 Jun 2010 23:27:23 +0700 - v0.5.0
+  - Add partial content support 
+  - Revise HTTP responses
+  - Fix HTTP-date format
+  - Fix server does not read index.html in non-basedir
+  - Fix problem with broken symlinks
+  - Header should use CRLF for end-of-line
   - Make use of thread-safe functions
     - localtime_r(), strtok_r()
   - syslog is now optional
     - Use -l to enable
+
 * Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
   - Add manpage and more help messages
   - Use GPL-compatible code to unescape
@@ -44,7 +49,7 @@ ChangeLogs
     - Client termination may cause broken pipe (SIGPIPE)
       - Ref: Neutron Soutmun
     - Properly close client socket if a thread cannot be created.
-    - GET / does not log URL properly when use_directory_index = 1
+    - GET / does not log URI properly when use_directory_index = 1
 
 * Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
   - Add SO_REUSEADDR 
@@ -52,7 +57,7 @@ ChangeLogs
   - Capable to transfer file size >= 2 GB
   - GNU Coding Style
   - Honour index.html if exists
-  - Capable to handle escaped URLs
+  - Capable to handle escaped URIs
   - Add HTML code for errors
   - Bugs fixed
     - Properly stop the server when receiving SIGINT (Ctrl+C)
@@ -132,10 +137,10 @@ Not-so-near-future To Do
 #define BACKLOG 16
 #define BUFFER_SIZE 1024
 #define CHUNK_SIZE 1073741824
-#define HEADER_MAX 256
-#define URL_MAX 256
-#define VERSION "0.0.5"
-#define SERVER_VERSION "Kitty-HTTPD/0.0.5"
+#define HEADER_MAX 512
+#define URI_MAX 256
+#define VERSION "0.5.0"
+#define SERVER_VERSION "Kitty-HTTPD/0.5.0"
 
 static void *sig_int (int);
 static void *service_client (void *);
@@ -166,20 +171,19 @@ main (int argc, char *argv[])
   memset (username, '\0', sizeof username);
 
   /* parse argument */
-  static const struct option longopts[] = 
-    {
-      {"v6only",    0, NULL, '6'},
-      {"docroot",   1, NULL, 'd'},
-      {"path",      1, NULL, 'd'},
-      {"help",      0, NULL, 'h'},
-      {"index",     0, NULL, 'i'},
-      {"log",       0, NULL, 'l'},
-      {"port",      1, NULL, 'p'},
-      {"reuseaddr", 0, NULL, 'r'},
-      {"user",      1, NULL, 'u'},
-      {"version",   0, NULL, 'v'},
-      {0, 0, 0, 0}
-    };
+  static const struct option longopts[] = {
+    {"v6only", 0, NULL, '6'},
+    {"docroot", 1, NULL, 'd'},
+    {"path", 1, NULL, 'd'},
+    {"help", 0, NULL, 'h'},
+    {"index", 0, NULL, 'i'},
+    {"log", 0, NULL, 'l'},
+    {"port", 1, NULL, 'p'},
+    {"reuseaddr", 0, NULL, 'r'},
+    {"user", 1, NULL, 'u'},
+    {"version", 0, NULL, 'v'},
+    {0, 0, 0, 0}
+  };
 
   while ((opt = getopt_long (argc, argv, "6d:hilp:ru:v", longopts, 0)) != -1)
     {
@@ -227,13 +231,13 @@ main (int argc, char *argv[])
              LOG_LOCAL0);
 
   /* seteuid if needed */
-  if (use_euid) 
+  if (use_euid)
     {
       struct passwd *pwd = getpwnam (username);
-      if (pwd == NULL) 
+      if (pwd == NULL)
         {
           endpwent ();
-          switch (errno) 
+          switch (errno)
             {
             case (0):
             case (ENOENT):
@@ -250,7 +254,7 @@ main (int argc, char *argv[])
           exit (EXIT_FAILURE);
         }
 
-      if (seteuid (pwd -> pw_uid) == -1)
+      if (seteuid (pwd->pw_uid) == -1)
         {
           endpwent ();
 
@@ -349,10 +353,10 @@ main (int argc, char *argv[])
   if (use_syslog)
     syslog (LOG_INFO,
             "user %s starts kitty-httpd at port %u, document root = %s.",
-            pwd -> pw_name, server_port, basedir);
+            pwd->pw_name, server_port, basedir);
   else
     printf ("user %s starts kitty-httpd at port %u, document root = %s.\n",
-            pwd -> pw_name, server_port, basedir);
+            pwd->pw_name, server_port, basedir);
 
   /* main loop - accept a connection, thread out service function */
   while (!stop)
@@ -444,8 +448,7 @@ service_client (void *client_sockfd_ptr)
   /* get current time */
   char timestamp[32];
   time_t now = time (NULL);
-  strftime (timestamp, sizeof timestamp, "%a %d %b %Y %T %Z",
-            localtime (&now));
+  strftime (timestamp, sizeof timestamp, "%a, %d %b %Y %T %Z", gmtime (&now));
 
   /* get peer address */
   struct sockaddr_storage client_ss;
@@ -459,8 +462,24 @@ service_client (void *client_sockfd_ptr)
   /* process the request */
   char *saveptr;
   char *method = (char *) strtok_r (buffer, " ", &saveptr);
-  char *URL = (char *) strtok_r (NULL, " ", &saveptr);
+  char *URI = (char *) strtok_r (NULL, " ", &saveptr);
   char *version = (char *) strtok_r (NULL, "\r\n", &saveptr);
+  char *line = NULL;
+  char *first_byte_pos_str = NULL;
+  char *last_byte_pos_str = NULL;
+  do
+    {
+      line = strtok_r (NULL, "\r\n", &saveptr);
+      if (line != NULL)
+        if (strcasestr (line, "range: bytes"))
+          {
+            strsep (&line, "=");
+            first_byte_pos_str = strsep (&line, "-");
+            last_byte_pos_str = strsep (&line, "\r\n");
+            break;
+          }
+    }
+  while (line != NULL);
 
   char header[HEADER_MAX];
   char file[PATH_MAX];
@@ -486,8 +505,8 @@ service_client (void *client_sockfd_ptr)
             syslog (LOG_INFO, "error setting TCP_CORK: %m");
         }
 
-      unescape (URL);
-      snprintf (file, (sizeof file) - 1, "%s/%s", basedir, URL);
+      unescape (URI);
+      snprintf (file, (sizeof file) - 1, "%s/%s", basedir, URI);
       file[PATH_MAX - 1] = '\0';
       int fd = open (file, O_RDONLY);
       if (fd == -1)
@@ -495,37 +514,37 @@ service_client (void *client_sockfd_ptr)
           switch (errno)
             {
             case EACCES:        /* 403 Forbidden */
+              memset (header, '\0', sizeof header);
               snprintf (header, (sizeof header - 1),
-                        "%s 403 Forbidden\r\n\r\n<html><body><h1>403 Forbidden</h1><hr>%s</body></html>",
-                        version, SERVER_VERSION);
-              header[(sizeof header) - 1] = '\0';
+                        "%s 403 Forbidden\r\nConnection: close\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>403 Forbidden</h1><hr>%s</body></html>",
+                        version, timestamp, SERVER_VERSION, SERVER_VERSION);
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
                 syslog (LOG_INFO, "%s %s %s %s 403 Forbidden %d", peer,
-                        method, URL, version, xfer_size);
+                        method, URI, version, xfer_size);
               break;
             case ENOENT:        /* 404 Not Found */
+              memset (header, '\0', sizeof header);
               snprintf (header, (sizeof header - 1),
-                        "%s 404 Not Found\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
-                        version, SERVER_VERSION);
-              header[(sizeof header) - 1] = '\0';
+                        "%s 404 Not Found\r\nConnection: close\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
+                        version, timestamp, SERVER_VERSION, SERVER_VERSION);
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
                 syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d", peer,
-                        method, URL, version, xfer_size);
+                        method, URI, version, xfer_size);
               break;
             default:            /* 400 Bad Request */
+              memset (header, '\0', sizeof header);
               snprintf (header, (sizeof header - 1),
-                        "%s 400 Bad Request\r\n\r\n<html><body><h1>400 Bad Request</h1><hr>%s</body></html>",
-                        version, SERVER_VERSION);
-              header[(sizeof header) - 1] = '\0';
+                        "%s 400 Bad Request\r\nConnection: close\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>400 Bad Request</h1><hr>%s</body></html>",
+                        version, timestamp, SERVER_VERSION, SERVER_VERSION);
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
                 syslog (LOG_INFO, "%s %s %s %s 400 Bad Request %d", peer,
-                        method, URL, version, xfer_size);
+                        method, URI, version, xfer_size);
             }
         }
       else
@@ -534,29 +553,91 @@ service_client (void *client_sockfd_ptr)
           fstat (fd, &file_stat);
           if (S_ISREG (file_stat.st_mode))
             {
-              snprintf (header, (sizeof header - 1),
-                        "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %llu\r\n\r\n",
-                        version, timestamp, SERVER_VERSION,
-                        get_mime_type (URL), (uint64_t) file_stat.st_size);
-              header[(sizeof header) - 1] = '\0';
-              send ((int) client_sockfd, header, strlen (header), 0);
-
-              off_t offset = 0;
+              off_t first_byte_pos = 0;
+              off_t last_byte_pos = file_stat.st_size - 1;
               uint64_t total_xfer = 0;
+
+              /* HTTP request with range ? */
+              if (first_byte_pos_str != NULL || last_byte_pos_str != NULL)
+                {
+                  if (strlen (first_byte_pos_str))
+                    first_byte_pos = (off_t) atoll (first_byte_pos_str);
+
+                  if (strlen (last_byte_pos_str))
+                    last_byte_pos = (off_t) atoll (last_byte_pos_str);
+
+                  /* check if request last n bytes */
+                  if ((strlen (first_byte_pos_str) == 0) && (last_byte_pos))
+                    {
+                      first_byte_pos = file_stat.st_size - last_byte_pos;
+                      last_byte_pos = file_stat.st_size - 1;
+                    }
+
+                  /* check if range is satisfiable */
+                  if ((first_byte_pos > file_stat.st_size)
+                      || (last_byte_pos > file_stat.st_size))
+                    {
+                      /* not satisfiable */
+                      first_byte_pos = 0;
+                      last_byte_pos = 0;
+
+                      memset (header, '\0', sizeof header);
+                      snprintf (header, (sizeof header - 1),
+                                "%s 416 Requested Range Not Satisfiable\r\nConnection: close\r\nContent-Range: */%llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                                version, (uint64_t) file_stat.st_size,
+                                timestamp, SERVER_VERSION);
+                      xfer_size =
+                        send ((int) client_sockfd, header, strlen (header), 0);
+                    }
+
+                  char last_modified[32];
+                  strftime (last_modified, sizeof (last_modified),
+                            "%a, %d %b %Y %T %Z",
+                            gmtime (&file_stat.st_mtime));
+
+                  memset (header, '\0', sizeof header);
+                  snprintf (header, (sizeof header - 1),
+                            "%s 206 Partial Content\r\nConnection: close\r\nContent-Location: \"%s\"\r\nContent-Type: %s\r\nLast-Modified: %s\r\nAccept-Ranges: bytes\r\nContent-Range: bytes %llu-%llu/%llu\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                            version, URI, get_mime_type (URI), last_modified,
+                            (uint64_t) first_byte_pos,
+                            (uint64_t) last_byte_pos,
+                            (uint64_t) file_stat.st_size,
+                            last_byte_pos - first_byte_pos + 1, 
+                            timestamp, SERVER_VERSION);
+                  xfer_size =
+                    send ((int) client_sockfd, header, strlen (header), 0);
+                }
+              else
+                {
+                  memset (header, '\0', sizeof header);
+                  snprintf (header, (sizeof header - 1),
+                            "%s 200 OK\r\nConnection: close\r\nContent-Type: %s\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                            version, get_mime_type (URI),
+                            (uint64_t) file_stat.st_size,
+                            timestamp, SERVER_VERSION);
+                  xfer_size =
+                    send ((int) client_sockfd, header, strlen (header), 0);
+                }
+
+              uint64_t total_byte = first_byte_pos
+                || last_byte_pos ? last_byte_pos - first_byte_pos + 1 : 0;
 
               do
                 {
+                  size_t chunk =
+                    (total_byte - total_xfer) >
+                    CHUNK_SIZE ? CHUNK_SIZE : (total_byte - total_xfer);
                   xfer_size =
-                    sendfile ((int) client_sockfd, fd, &offset, CHUNK_SIZE);
+                    sendfile ((int) client_sockfd, fd, &first_byte_pos,
+                              chunk);
+
                   if (xfer_size == -1)
                     {
                       if (use_syslog)
                         syslog (LOG_INFO, "Error transfer data: %m");
-
                       break;
                     }
-                  else if ((xfer_size != CHUNK_SIZE)
-                           && (xfer_size < (file_stat.st_size - total_xfer)))
+                  else if (xfer_size != chunk)
                     {
                       /* client termination */
                       total_xfer += xfer_size;
@@ -567,45 +648,60 @@ service_client (void *client_sockfd_ptr)
                       total_xfer += xfer_size;
                     }
                 }
-              while (total_xfer < file_stat.st_size);
+              while (total_xfer < total_byte);
 
               if (use_syslog)
-                syslog (LOG_INFO, "%s %s %s %s 200 OK %llu", peer,
-                        method, URL, version, total_xfer);
+                {
+                  if (first_byte_pos == 0 && last_byte_pos == 0)
+                    syslog (LOG_INFO,
+                            "%s %s %s %s 416 Requested Range Not Satisfiable",
+                            peer, method, URI, version);
+                  else if (first_byte_pos_str != NULL
+                           || last_byte_pos_str != NULL)
+                    syslog (LOG_INFO, 
+                            "%s %s %s %s 206 Partial Content %llu",
+                            peer, method, URI, version, total_xfer);
+                  else
+                    syslog (LOG_INFO, 
+                            "%s %s %s %s 200 OK %llu", peer,
+                            method, URI, version, total_xfer);
+                }
             }
           else if (S_ISDIR (file_stat.st_mode))
             {
               /* index.html exists ? */
-              snprintf (file, (sizeof file) - 1, "%s/%s/index.html", basedir, URL);
+              snprintf (file, (sizeof file) - 1, "%s/%s/index.html",
+                        basedir, URI);
               file[(sizeof file) - 1] = '\0';
               int index_fd = open (file, O_RDONLY);
               if (index_fd == -1)
                 {
                   if (use_dir_index)
                     {
-                      char *index_page = get_index_page (URL);
+                      char *index_page = get_index_page (URI);
 
                       if (index_page == NULL)
                         {
+                          memset (header, '\0', sizeof header);
                           snprintf (header, (sizeof header) - 1,
-                                    "%s 503 Service Unavailable\r\n\r\n<html><body><h1>503 Service Unavailable</h1><hr>%s</body></html>",
-                                    version, SERVER_VERSION);
-                          header[(sizeof header) - 1] = '\0';
+                                    "%s 503 Service Unavailable\r\nConnection: close\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>503 Service Unavailable</h1><hr>%s</body></html>",
+                                    version, timestamp, SERVER_VERSION,
+                                    SERVER_VERSION);
                           xfer_size =
                             send ((int) client_sockfd, header,
                                   strlen (header), 0);
                           if (use_syslog)
                             syslog (LOG_INFO,
                                     "%s %s %s %s 503 Service Unavailable %d",
-                                    peer, method, URL, version, xfer_size);
+                                    peer, method, URI, version, xfer_size);
                         }
                       else
                         {
+                          memset (header, '\0', sizeof header);
                           snprintf (header, (sizeof header) - 1,
-                                    "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
-                                    version, timestamp, SERVER_VERSION,
-                                    "text/html", strlen (index_page));
-                          header[(sizeof header) - 1] = '\0';
+                                    "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                                    version, "text/html", strlen (index_page),
+                                    timestamp, SERVER_VERSION);
                           send ((int) client_sockfd, header, strlen (header),
                                 0);
                           xfer_size =
@@ -614,34 +710,35 @@ service_client (void *client_sockfd_ptr)
 
                           if (use_syslog)
                             syslog (LOG_INFO, "%s %s %s %s 200 OK %d",
-                                    peer, method, URL, version, xfer_size);
+                                    peer, method, URI, version, xfer_size);
 
                           free (index_page);
                         }
                     }
                   else
                     {
+                      memset (header, '\0', sizeof header);
                       snprintf (header, (sizeof header - 1),
-                                "%s 404 Not Found\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
-                                version, SERVER_VERSION);
-                      header[(sizeof header) - 1] = '\0';
+                                "%s 404 Not Found\r\nConnection: close\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>404 Not Found</h1><hr>%s</body></html>",
+                                version, timestamp, SERVER_VERSION,
+                                SERVER_VERSION);
                       xfer_size =
                         send ((int) client_sockfd, header, strlen (header),
                               0);
                       if (use_syslog)
                         syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d",
-                                peer, method, URL, version, xfer_size);
+                                peer, method, URI, version, xfer_size);
                     }
                 }
               else
                 {
                   struct stat index_file_stat;
                   fstat (index_fd, &index_file_stat);
+                  memset (header, '\0', sizeof header);
                   snprintf (header, (sizeof header) - 1,
-                            "%s 200 OK\r\nDate: %s\r\nServer: %s\r\nContent-Type: text/html\r\nContent-Length: %llu\r\n\r\n",
-                            version, timestamp, SERVER_VERSION,
-                            (uint64_t) index_file_stat.st_size);
-                  header[(sizeof header) - 1] = '\0';
+                            "%s 200 OK\r\nContent-Type: text/html\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                            version, (uint64_t) index_file_stat.st_size,
+                            timestamp, SERVER_VERSION);
                   send ((int) client_sockfd, header, strlen (header), 0);
                   off_t offset = 0;
                   xfer_size =
@@ -649,7 +746,7 @@ service_client (void *client_sockfd_ptr)
                               index_file_stat.st_size);
                   if (use_syslog)
                     syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer,
-                            method, URL, version, xfer_size);
+                            method, URI, version, xfer_size);
                   close (index_fd);
                 }
             }
@@ -658,26 +755,26 @@ service_client (void *client_sockfd_ptr)
     }
   else if (strcmp (method, "HEAD") == 0)
     {
+      memset (header, '\0', sizeof header);
       snprintf (header, (sizeof header) - 1,
-                "%s 200 OK\r\nDate: %s\r\nServer: %s\r\n\r\n", version, timestamp,
-                SERVER_VERSION);
-      header[(sizeof header) - 1] = '\0';
+                "%s 200 OK\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                version, timestamp, SERVER_VERSION);
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
       if (use_syslog)
-        syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer, method, URL,
+        syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer, method, URI,
                 version, xfer_size);
     }
   else
     {
       /* 501 Not Implemented */
+      memset (header, '\0', sizeof header);
       snprintf (header, (sizeof header) - 1,
-                "%s 501 Not Implemented\r\nDate: %sServer: %s\r\n\r\n<html><body><h1>501 Not Implemented</h1><hr>%s</body></html>",
+                "%s 501 Not Implemented\r\nContent-Type: text/html\r\nDate: %s\r\nServer: %s\r\n\r\n<html><body><h1>501 Not Implemented</h1><hr>%s</body></html>",
                 version, timestamp, SERVER_VERSION, SERVER_VERSION);
-      header[(sizeof header) - 1] = '\0';
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
       if (use_syslog)
         syslog (LOG_INFO, "%s %s %s %s 501 Not Implemented %d", peer,
-                method, URL, version, xfer_size);
+                method, URI, version, xfer_size);
     }
 
   shutdown ((int) client_sockfd, SHUT_RDWR);
@@ -691,23 +788,23 @@ service_client (void *client_sockfd_ptr)
  * */
 
 static char *
-get_index_page (char *orig_URL)
+get_index_page (char *orig_URI)
 {
   struct dirent **dir_entry;
   char path[PATH_MAX];
-  char URL[URL_MAX];
+  char URI[URI_MAX];
   int n;
 
-  if (URL == NULL)
+  if (URI == NULL)
     return NULL;
 
-  memset (URL, '\0', sizeof URL);
-  strncpy (URL, orig_URL, strlen (orig_URL));
-  if (URL[strlen (URL) - 1] == '/')
-    URL[strlen (URL) - 1] = '\0';
+  memset (URI, '\0', sizeof URI);
+  strncpy (URI, orig_URI, strlen (orig_URI));
+  if (URI[strlen (URI) - 1] == '/')
+    URI[strlen (URI) - 1] = '\0';
 
   memset (path, '\0', sizeof path);
-  snprintf (path, (sizeof path) - 1, "%s%s", basedir, URL);
+  snprintf (path, (sizeof path) - 1, "%s%s", basedir, URI);
   path[(sizeof path) - 1] = '\0';
   if ((n = scandir (path, &dir_entry, 0, alphasort)) == -1)
     {
@@ -735,7 +832,7 @@ get_index_page (char *orig_URL)
           l =
             snprintf (ptr, 512,
                       "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><pre>",
-                      URL, URL);
+                      URI, URI);
           ptr += (l * sizeof (char));
 
           for (i = 0; i < n; i++)
@@ -761,7 +858,8 @@ get_index_page (char *orig_URL)
                   char last_modified[32];
                   struct tm result;
                   strftime (last_modified, sizeof last_modified,
-                            "%F %T %Z", localtime_r (&file_stat.st_mtime, &result));
+                            "%F %T %Z", localtime_r (&file_stat.st_mtime,
+                                                     &result));
                   if (S_ISREG (file_stat.st_mode))
                     {
                       int spaces = 40 - strlen (dir_entry[i]->d_name);
@@ -769,7 +867,7 @@ get_index_page (char *orig_URL)
                       l =
                         snprintf (ptr, 256,
                                   "[   ] <a href=\"%s/%s\">%-.39s</a>%*s%s %llu\n",
-                                  URL, dir_entry[i]->d_name,
+                                  URI, dir_entry[i]->d_name,
                                   dir_entry[i]->d_name, spaces, " ",
                                   last_modified,
                                   (uint64_t) file_stat.st_size);
@@ -782,7 +880,7 @@ get_index_page (char *orig_URL)
                       l =
                         snprintf (ptr, 256,
                                   "[DIR] <a href=\"%s/%s\">%-.39s</a>%*s%s -\n",
-                                  URL, dir_entry[i]->d_name,
+                                  URI, dir_entry[i]->d_name,
                                   dir_entry[i]->d_name, spaces, " ",
                                   last_modified);
                       ptr += (l * sizeof (char));
@@ -957,7 +1055,7 @@ unescape (char *str)
 {
   char *p = str;
 
-  while (*str) 
+  while (*str)
     {
       if (*str == '%')
         {
@@ -978,9 +1076,8 @@ unescape (char *str)
 static inline unsigned char
 hex (char c)
 {
-  return c >= '0' && c <= '9' ? c - '0' 
-         : c >= 'A' && c <= 'F' ? c - 'A' + 10 
-         : c - 'a' + 10;
+  return c >= '0' && c <= '9' ? c - '0'
+    : c >= 'A' && c <= 'F' ? c - 'A' + 10 : c - 'a' + 10;
 }
 
 static void
@@ -992,10 +1089,12 @@ help (char *progname)
   printf ("  -6, --v6only                    use IPv6 only\n");
   printf ("  -d, --docroot=, --path=PATH     set document root to PATH \n");
   printf ("  -i, --index                     use automatic indexing\n");
-  printf ("  -p, --port=NUM                  listen on port NUM (default 8080)\n");
+  printf
+    ("  -p, --port=NUM                  listen on port NUM (default 8080)\n");
   printf ("  -l, --log                       log to syslog\n");
   printf ("  -r, --reuseaddr                 attempt to set SO_REUSEADDR\n");
-  printf ("  -u, --user=USERNAME             use user USERNAME to run the server\n");
+  printf
+    ("  -u, --user=USERNAME             use user USERNAME to run the server\n");
   printf ("  -v, --version                   show version\n");
   printf ("  -h, --help                      print this help\n");
   printf ("\n");
