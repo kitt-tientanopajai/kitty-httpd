@@ -1,4 +1,17 @@
 ChangeLogs
+  - Fix sending 206 header after 416 header
+
+* Mon, 07 Jun 2010 23:27:23 +0700 - v0.5.0
+  - Add partial content support 
+  - Revise HTTP responses
+  - Fix HTTP-date format
+  - Fix server does not read index.html in non-basedir
+  - Fix problem with broken symlinks
+  - Header should use CRLF for end-of-line
+  - Make use of thread-safe functions
+    - localtime_r(), strtok_r()
+  - syslog is now optional
+    - Use -l to enable
 
 * Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
   - Add manpage and more help messages

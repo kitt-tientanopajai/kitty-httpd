@@ -20,6 +20,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 ChangeLogs
 ----------
 
+  - Fix sending 206 header after 416 header
+
 * Mon, 07 Jun 2010 23:27:23 +0700 - v0.5.0
   - Add partial content support 
   - Revise HTTP responses
@@ -589,23 +591,25 @@ service_client (void *client_sockfd_ptr)
                       xfer_size =
                         send ((int) client_sockfd, header, strlen (header), 0);
                     }
+                  else
+                    {
+                      char last_modified[32];
+                      strftime (last_modified, sizeof (last_modified),
+                                "%a, %d %b %Y %T %Z",
+                                gmtime (&file_stat.st_mtime));
 
-                  char last_modified[32];
-                  strftime (last_modified, sizeof (last_modified),
-                            "%a, %d %b %Y %T %Z",
-                            gmtime (&file_stat.st_mtime));
-
-                  memset (header, '\0', sizeof header);
-                  snprintf (header, (sizeof header - 1),
-                            "%s 206 Partial Content\r\nConnection: close\r\nContent-Location: \"%s\"\r\nContent-Type: %s\r\nLast-Modified: %s\r\nAccept-Ranges: bytes\r\nContent-Range: bytes %llu-%llu/%llu\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
-                            version, URI, get_mime_type (URI), last_modified,
-                            (uint64_t) first_byte_pos,
-                            (uint64_t) last_byte_pos,
-                            (uint64_t) file_stat.st_size,
-                            last_byte_pos - first_byte_pos + 1, 
-                            timestamp, SERVER_VERSION);
-                  xfer_size =
-                    send ((int) client_sockfd, header, strlen (header), 0);
+                      memset (header, '\0', sizeof header);
+                      snprintf (header, (sizeof header - 1),
+                                "%s 206 Partial Content\r\nConnection: close\r\nContent-Location: \"%s\"\r\nContent-Type: %s\r\nLast-Modified: %s\r\nAccept-Ranges: bytes\r\nContent-Range: bytes %llu-%llu/%llu\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                                version, URI, get_mime_type (URI), last_modified,
+                                (uint64_t) first_byte_pos,
+                                (uint64_t) last_byte_pos,
+                                (uint64_t) file_stat.st_size,
+                                last_byte_pos - first_byte_pos + 1, 
+                                timestamp, SERVER_VERSION);
+                      xfer_size =
+                        send ((int) client_sockfd, header, strlen (header), 0);
+                   }
                 }
               else
                 {
