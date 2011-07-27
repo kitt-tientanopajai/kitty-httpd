@@ -17,94 +17,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-ChangeLogs
-----------
-
-  - Fix sending 206 header after 416 header
-
-* Mon, 07 Jun 2010 23:27:23 +0700 - v0.5.0
-  - Add partial content support 
-  - Revise HTTP responses
-  - Fix HTTP-date format
-  - Fix server does not read index.html in non-basedir
-  - Fix problem with broken symlinks
-  - Header should use CRLF for end-of-line
-  - Make use of thread-safe functions
-    - localtime_r(), strtok_r()
-  - syslog is now optional
-    - Use -l to enable
-
-* Fri, 11 Sep 2009 21:16:45 +0700 - v0.0.5
-  - Add manpage and more help messages
-  - Use GPL-compatible code to unescape
-    - Use W3C instead of MPL.
-  - Add option -u for setting effective user
-  - Move all console messages to syslog facility 
-    - kitty-httpd uses LOG_LOCAL0
-  - Add IPv6 support
-  - Add option -i for directory index
-  - Add option -v for version
-  - Cleanup indent & re-tab
-  - Bugs fixed
-    - The recv loop does not read properly
-    - Free client_sockfd (too many open files)
-    - Client termination may cause broken pipe (SIGPIPE)
-      - Ref: Neutron Soutmun
-    - Properly close client socket if a thread cannot be created.
-    - GET / does not log URI properly when use_directory_index = 1
-
-* Fri, 24 Jul 2009 20:23:18 +0700 -v0.0.4
-  - Add SO_REUSEADDR 
-  - Rewrite sendfile loop
-  - Capable to transfer file size >= 2 GB
-  - GNU Coding Style
-  - Honour index.html if exists
-  - Capable to handle escaped URIs
-  - Add HTML code for errors
-  - Bugs fixed
-    - Properly stop the server when receiving SIGINT (Ctrl+C)
-    - Long-waiting 'cancel download' handle
-    - Threads do not exit properly causing high memory consumption
-    - Memory leaks in threads
-    - File size should be long long unsigned
-    - Content length should be long long unsigned
-
-* Mon, 06 Oct 2008 01:00:46 +0700 - v0.0.3
-  - Use current directory as default base directory
-  - Add option -p port
-  - Add option -d base directory
-  - Implement directory index
-  - Add more MIME type (i.e., OpenOffice)
-  - Bugs fixed 
-    - Send HTTP version according to the request
-    - Correct some MIME Types
-
-* Tue, 30 Sep 2008 20:04:02 +0700 - v0.0.2
-  - Implement all HTTP/1.1 requirement (GET, HEAD)
-  - Response based on version requested
-  - NPTL-based Multithreading
-  - MIME supported based on file extension
-  - Bugs fixed
-
-* Sat, 27 Sep 2008 23:06:18 +0700 - v0.0.1
-  - Initial version
-  - Implement GET method only
-  - HTTP/0.9
-
-Known Issues
-------------
-  - Large number of requests may cause segfault if index.html does not exist
-
-To Do
------
-  - Secure programming
-  - Network optimization
-  - Beautify the index page + CSS
-
-Not-so-near-future To Do
-------------------------
-  - GNOME Notification Area
-
 */
 
 #define _FILE_OFFSET_BITS 64
@@ -146,7 +58,7 @@ Not-so-near-future To Do
 
 static void *sig_int (int);
 static void *service_client (void *);
-static char *get_index_page (char *);
+static FILE *get_index_page (char *);
 static char *get_mime_type (char *);
 static void unescape (char *);
 static inline unsigned char hex (char);
@@ -417,7 +329,7 @@ sig_int (int sig)
 static void *
 service_client (void *client_sockfd_ptr)
 {
-  int *client_sockfd = (int *) client_sockfd_ptr;
+  int client_sockfd = (int *) client_sockfd_ptr;
 
   /* read HTTP request */
   char buffer[BUFFER_SIZE];
@@ -523,8 +435,8 @@ service_client (void *client_sockfd_ptr)
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
-                syslog (LOG_INFO, "%s %s %s %s 403 Forbidden %d", peer,
-                        method, URI, version, xfer_size);
+                syslog (LOG_INFO, "%s %s %s %s 403 Forbidden %llu", peer,
+                        method, URI, version, (unsigned long long) xfer_size);
               break;
             case ENOENT:        /* 404 Not Found */
               memset (header, '\0', sizeof header);
@@ -534,8 +446,8 @@ service_client (void *client_sockfd_ptr)
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
-                syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d", peer,
-                        method, URI, version, xfer_size);
+                syslog (LOG_INFO, "%s %s %s %s 404 Not Found %llu", peer,
+                        method, URI, version, (unsigned long long) xfer_size);
               break;
             default:            /* 400 Bad Request */
               memset (header, '\0', sizeof header);
@@ -545,8 +457,8 @@ service_client (void *client_sockfd_ptr)
               xfer_size =
                 send ((int) client_sockfd, header, strlen (header), 0);
               if (use_syslog)
-                syslog (LOG_INFO, "%s %s %s %s 400 Bad Request %d", peer,
-                        method, URI, version, xfer_size);
+                syslog (LOG_INFO, "%s %s %s %s 400 Bad Request %llu", peer,
+                        method, URI, version, (unsigned long long) xfer_size);
             }
         }
       else
@@ -557,7 +469,7 @@ service_client (void *client_sockfd_ptr)
             {
               off_t first_byte_pos = 0;
               off_t last_byte_pos = file_stat.st_size - 1;
-              uint64_t total_xfer = 0;
+              unsigned long long total_xfer = 0;
 
               /* HTTP request with range ? */
               if (first_byte_pos_str != NULL || last_byte_pos_str != NULL)
@@ -586,7 +498,7 @@ service_client (void *client_sockfd_ptr)
                       memset (header, '\0', sizeof header);
                       snprintf (header, (sizeof header - 1),
                                 "%s 416 Requested Range Not Satisfiable\r\nConnection: close\r\nContent-Range: */%llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
-                                version, (uint64_t) file_stat.st_size,
+                                version, (unsigned long long) file_stat.st_size,
                                 timestamp, SERVER_VERSION);
                       xfer_size =
                         send ((int) client_sockfd, header, strlen (header), 0);
@@ -602,10 +514,10 @@ service_client (void *client_sockfd_ptr)
                       snprintf (header, (sizeof header - 1),
                                 "%s 206 Partial Content\r\nConnection: close\r\nContent-Location: \"%s\"\r\nContent-Type: %s\r\nLast-Modified: %s\r\nAccept-Ranges: bytes\r\nContent-Range: bytes %llu-%llu/%llu\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
                                 version, URI, get_mime_type (URI), last_modified,
-                                (uint64_t) first_byte_pos,
-                                (uint64_t) last_byte_pos,
-                                (uint64_t) file_stat.st_size,
-                                last_byte_pos - first_byte_pos + 1, 
+                                (unsigned long long) first_byte_pos,
+                                (unsigned long long) last_byte_pos,
+                                (unsigned long long) file_stat.st_size,
+                                (unsigned long long) last_byte_pos - first_byte_pos + 1, 
                                 timestamp, SERVER_VERSION);
                       xfer_size =
                         send ((int) client_sockfd, header, strlen (header), 0);
@@ -617,13 +529,13 @@ service_client (void *client_sockfd_ptr)
                   snprintf (header, (sizeof header - 1),
                             "%s 200 OK\r\nConnection: close\r\nContent-Type: %s\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
                             version, get_mime_type (URI),
-                            (uint64_t) file_stat.st_size,
+                            (unsigned long long) file_stat.st_size,
                             timestamp, SERVER_VERSION);
                   xfer_size =
                     send ((int) client_sockfd, header, strlen (header), 0);
                 }
 
-              uint64_t total_byte = first_byte_pos
+              unsigned long long total_byte = first_byte_pos
                 || last_byte_pos ? last_byte_pos - first_byte_pos + 1 : 0;
 
               do
@@ -664,7 +576,7 @@ service_client (void *client_sockfd_ptr)
                            || last_byte_pos_str != NULL)
                     syslog (LOG_INFO, 
                             "%s %s %s %s 206 Partial Content %llu",
-                            peer, method, URI, version, total_xfer);
+                            peer, method, URI, version, (unsigned long long) total_xfer);
                   else
                     syslog (LOG_INFO, 
                             "%s %s %s %s 200 OK %llu", peer,
@@ -682,9 +594,11 @@ service_client (void *client_sockfd_ptr)
                 {
                   if (use_dir_index)
                     {
-                      char *index_page = get_index_page (URI);
+                      FILE *index_fp = get_index_page (URI);
+                  		struct stat index_file_stat;
+                  		fstat (fileno (index_fp), &index_file_stat);
 
-                      if (index_page == NULL)
+                      if (index_fp == NULL)
                         {
                           memset (header, '\0', sizeof header);
                           snprintf (header, (sizeof header) - 1,
@@ -696,27 +610,28 @@ service_client (void *client_sockfd_ptr)
                                   strlen (header), 0);
                           if (use_syslog)
                             syslog (LOG_INFO,
-                                    "%s %s %s %s 503 Service Unavailable %d",
-                                    peer, method, URI, version, xfer_size);
+                                    "%s %s %s %s 503 Service Unavailable %llu",
+                                    peer, method, URI, version, (unsigned long long) xfer_size);
                         }
                       else
                         {
                           memset (header, '\0', sizeof header);
                           snprintf (header, (sizeof header) - 1,
-                                    "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nDate: %s\r\nServer: %s\r\n\r\n",
-                                    version, "text/html", strlen (index_page),
+                                    "%s 200 OK\r\nContent-Type: %s\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
+                                    version, "text/html", 
+													          (unsigned long long) index_file_stat.st_size,
                                     timestamp, SERVER_VERSION);
-                          send ((int) client_sockfd, header, strlen (header),
-                                0);
-                          xfer_size =
-                            send ((int) client_sockfd, index_page,
-                                  strlen (index_page), 0);
+                          send ((int) client_sockfd, header, strlen (header), 0);
+                  				off_t offset = 0;
+                  				xfer_size =
+                    				sendfile ((int) client_sockfd, fileno (index_fp), &offset, 
+														          index_file_stat.st_size);
 
                           if (use_syslog)
-                            syslog (LOG_INFO, "%s %s %s %s 200 OK %d",
-                                    peer, method, URI, version, xfer_size);
+                            syslog (LOG_INFO, "%s %s %s %s 200 OK %llu",
+                                    peer, method, URI, version, (unsigned long long) xfer_size);
 
-                          free (index_page);
+                          fclose (index_fp);
                         }
                     }
                   else
@@ -730,8 +645,8 @@ service_client (void *client_sockfd_ptr)
                         send ((int) client_sockfd, header, strlen (header),
                               0);
                       if (use_syslog)
-                        syslog (LOG_INFO, "%s %s %s %s 404 Not Found %d",
-                                peer, method, URI, version, xfer_size);
+                        syslog (LOG_INFO, "%s %s %s %s 404 Not Found %llu",
+                                peer, method, URI, version, (unsigned long long) xfer_size);
                     }
                 }
               else
@@ -741,7 +656,7 @@ service_client (void *client_sockfd_ptr)
                   memset (header, '\0', sizeof header);
                   snprintf (header, (sizeof header) - 1,
                             "%s 200 OK\r\nContent-Type: text/html\r\nContent-Length: %llu\r\nDate: %s\r\nServer: %s\r\n\r\n",
-                            version, (uint64_t) index_file_stat.st_size,
+                            version, (unsigned long long) index_file_stat.st_size,
                             timestamp, SERVER_VERSION);
                   send ((int) client_sockfd, header, strlen (header), 0);
                   off_t offset = 0;
@@ -749,8 +664,8 @@ service_client (void *client_sockfd_ptr)
                     sendfile ((int) client_sockfd, index_fd, &offset,
                               index_file_stat.st_size);
                   if (use_syslog)
-                    syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer,
-                            method, URI, version, xfer_size);
+                    syslog (LOG_INFO, "%s %s %s %s 200 OK %llu", peer,
+                            method, URI, version, (unsigned long long ) xfer_size);
                   close (index_fd);
                 }
             }
@@ -765,8 +680,8 @@ service_client (void *client_sockfd_ptr)
                 version, timestamp, SERVER_VERSION);
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
       if (use_syslog)
-        syslog (LOG_INFO, "%s %s %s %s 200 OK %d", peer, method, URI,
-                version, xfer_size);
+        syslog (LOG_INFO, "%s %s %s %s 200 OK %llu", peer, method, URI,
+                version, (unsigned long long) xfer_size);
     }
   else
     {
@@ -777,8 +692,8 @@ service_client (void *client_sockfd_ptr)
                 version, timestamp, SERVER_VERSION, SERVER_VERSION);
       xfer_size = send ((int) client_sockfd, header, strlen (header), 0);
       if (use_syslog)
-        syslog (LOG_INFO, "%s %s %s %s 501 Not Implemented %d", peer,
-                method, URI, version, xfer_size);
+        syslog (LOG_INFO, "%s %s %s %s 501 Not Implemented %llu", peer,
+                method, URI, version, (unsigned long long) xfer_size);
     }
 
   shutdown ((int) client_sockfd, SHUT_RDWR);
@@ -788,10 +703,10 @@ service_client (void *client_sockfd_ptr)
 
 /* 
  * get_index_page from path
- * return char pointer to index page
+ * return index page file pointer
  * */
 
-static char *
+static FILE *
 get_index_page (char *orig_URI)
 {
   struct dirent **dir_entry;
@@ -819,9 +734,9 @@ get_index_page (char *orig_URI)
     }
   else
     {
-      char *index_page = (char *) malloc (512000);
+			FILE *index_file = tmpfile();
 
-      if (index_page == NULL)
+      if (index_file == NULL)
         {
           if (use_syslog)
             syslog (LOG_INFO, "error creating index page: %m");
@@ -830,14 +745,12 @@ get_index_page (char *orig_URI)
         }
       else
         {
-          char *ptr = index_page;
           int i, l;
 
           l =
-            snprintf (ptr, 512,
-                      "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><pre>",
-                      URI, URI);
-          ptr += (l * sizeof (char));
+            fprintf (index_file,
+						         "<html><title>Index of %s/</title><body><h1>Index of %s/</h1><pre>",
+                     URI, URI);
 
           for (i = 0; i < n; i++)
             {
@@ -862,43 +775,40 @@ get_index_page (char *orig_URI)
                   char last_modified[32];
                   struct tm result;
                   strftime (last_modified, sizeof last_modified,
-                            "%F %T %Z", localtime_r (&file_stat.st_mtime,
+                            "%F %T %z", localtime_r (&file_stat.st_mtime,
                                                      &result));
                   if (S_ISREG (file_stat.st_mode))
                     {
                       int spaces = 40 - strlen (dir_entry[i]->d_name);
                       spaces = (spaces < 1 ? 1 : spaces);
                       l =
-                        snprintf (ptr, 256,
-                                  "[   ] <a href=\"%s/%s\">%-.39s</a>%*s%s %llu\n",
-                                  URI, dir_entry[i]->d_name,
-                                  dir_entry[i]->d_name, spaces, " ",
-                                  last_modified,
-                                  (uint64_t) file_stat.st_size);
-                      ptr += (l * sizeof (char));
+                        fprintf (index_file, "[   ] <a href=\"%s/%s\">%-.39s</a>%*s%s %llu\n",
+                                 URI, dir_entry[i]->d_name,
+                                 dir_entry[i]->d_name, spaces, " ",
+                                 last_modified,
+                                 (unsigned long long) file_stat.st_size);
                     }
                   else if (S_ISDIR (file_stat.st_mode))
                     {
                       int spaces = 40 - strlen (dir_entry[i]->d_name);
                       spaces = (spaces < 1 ? 1 : spaces);
                       l =
-                        snprintf (ptr, 256,
-                                  "[DIR] <a href=\"%s/%s\">%-.39s</a>%*s%s -\n",
-                                  URI, dir_entry[i]->d_name,
-                                  dir_entry[i]->d_name, spaces, " ",
-                                  last_modified);
-                      ptr += (l * sizeof (char));
+                        fprintf (index_file, 
+												         "[DIR] <a href=\"%s/%s\">%-.39s</a>%*s%s -\n",
+                                 URI, dir_entry[i]->d_name,
+                                 dir_entry[i]->d_name, spaces, " ",
+                                 last_modified);
                     }
 
                 }
             }
 
           l =
-            snprintf (ptr, 48, "</pre><hr>%s</body></html>", SERVER_VERSION);
-          ptr += (l * sizeof (char));
+            fprintf (index_file, "</pre><hr>%s</body></html>", SERVER_VERSION);
 
+					fflush (index_file);
           free (dir_entry);
-          return index_page;
+          return index_file;
         }
     }
 }

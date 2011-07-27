@@ -1,4 +1,8 @@
 ChangeLogs
+
+  - Remove changelog, issues, todos from source code
+  - 64-bit cleanliness
+  - Generate index page on tmpfile(), instead of malloc()
   - Fix sending 206 header after 416 header
 
 * Mon, 07 Jun 2010 23:27:23 +0700 - v0.5.0
