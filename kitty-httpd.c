@@ -36,6 +36,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 #include <limits.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -210,7 +211,11 @@ main (int argc, char *argv[])
   /* signal handler */
   signal (SIGINT, (void *) sig_int);
   signal (SIGPIPE, SIG_IGN);
-  siginterrupt (SIGINT, 1);
+  struct sigaction sa;
+  sa.sa_handler = (void (*)(int))sig_int;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sigaction(SIGINT, &sa, NULL);
 
   /* create socket */
   if ((server_sockfd = socket (PF_INET6, SOCK_STREAM, 0)) == -1)
@@ -286,7 +291,7 @@ main (int argc, char *argv[])
           pthread_t tid;
 
           if (pthread_create
-              (&tid, NULL, service_client, (void *) client_sockfd))
+              (&tid, NULL, service_client, (void *) (intptr_t) client_sockfd))
             {
               if (use_syslog)
                 syslog (LOG_INFO, "error creating service thread: %m");
@@ -329,7 +334,7 @@ sig_int (int sig)
 static void *
 service_client (void *client_sockfd_ptr)
 {
-  int client_sockfd = (int *) client_sockfd_ptr;
+  int client_sockfd = (int) (intptr_t) client_sockfd_ptr;
 
   /* read HTTP request */
   char buffer[BUFFER_SIZE];
